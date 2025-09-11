@@ -5,14 +5,22 @@ namespace FileExplorer;
 
 class Program
 {
-    private static CancellationTokenSource refreshCancelSource = new();
-    private static object menuLock = new();
-    private static Menu menu;
-    private static int menuViewIndex;
-    private static int menuViewRange;
+    private static CancellationTokenSource _refreshCancelSource = new();
+    private static readonly object MenuLock = new();
+    private static readonly Menu Menu = new();
+    private static int _menuViewIndex;
+    private static int _menuViewRange;
+    private static int _menuScrollOvershoot = 2;
+    private static bool _showHiddenFiles;
 
-    private static Stack<string> dirHistory = new();
-    private static Process? commandLine;
+    private static string? _search;
+    private static Stack<string> _dirHistory = new();
+    private static Process? _commandLine;
+    
+    private static List<MenuItem> _selectedItems = new();
+    
+    private static List<string> _moveItems = new();
+    private static MoveStyle? _moveStyle = MoveStyle.None;
     
     public static void Main(string[] args)
     {
@@ -20,21 +28,43 @@ class Program
             $"""
             Command:
              {Process.GetCurrentProcess().ProcessName} [List of arguments]
-             
+            
             Arguments:
              -h | --help - Show this menu
              -o - Open current directory in file explorer
-             
+            
             Controls:
-             Up- / Down Arrow - Navigate menu
-             Enter | Space - Open selected directory
-             Pos1 | Ctrl + Up Arrow - Go to top of menu
-             End | Ctrl + Down Arrow - Go to bottom of menu
-             Escape - Go back one directory
-             F5 | Ctrl + R - Reload menu
-             Ctrl + B - Return to last directory
-             Ctrl + O - Open current directory in file explorer
-             Ctrl + D - Switch between menu and command line
+             Navigation:
+             | Up- / Down Arrow - Navigate items
+             | (WIP) Left- / Right Arrow - Navigate between menus
+             | Enter - Open selected directory
+             | Escape - Go back one directory or cancel current action
+             | Ctrl + B - Return to previous directory
+             | Ctrl + W - Go to specific directory by path
+             | Pos1 | Ctrl + Up Arrow - Go to fist item of menu
+             | End | Ctrl + Down Arrow - Go to last item of menu
+             | Ctrl + D - Switch between menu and command line
+             
+             Editing:
+             | F2 - Rename selected item
+             | Delete - Move item to recycle bin
+             | Shift + Delete - Permanently delete item
+             | Space - Select item
+             | Alt + Space - Select a region of items
+             | Ctrl + A - Select all directories and files
+             | Ctrl + C - Copy item
+             | Ctrl + X - Cut item
+             | Ctrl + V - Paste item
+             | Ctrl + N - Create new file
+             | Ctrl + Alt + N - Create new directory
+             
+             Misc:
+             | (WIP) F3 - Open / close second menu
+             | F5 | Ctrl + R - Reload menu
+             | Ctrl + F - Search in current directory
+             | Ctrl + T - Toggle visibility of hidden files / directories
+             | Ctrl + O - Open current directory in file explorer
+             | F10 - Close file explorer (To access the command line without closing, see Ctrl + D)
             
             """;
         
@@ -55,20 +85,39 @@ class Program
         
         Console.CancelKeyPress += (sender, e) =>
         {
-            Console.CursorVisible = true;
+            e.Cancel = true;
+            lock (MenuLock)
+            {
+                _moveItems.Clear();
+                if (_selectedItems.Count > 0)
+                {
+                    _moveItems.AddRange(_selectedItems.Select(item => Path.GetFullPath(item.Text)));
+                }
+                else
+                {
+                    MenuItem? item = Menu.GetItemAt(Menu.SelectedIndex);
+                    if (item?.Text == "..")
+                    {
+                        return;
+                    }
+                
+                    _moveItems.Add(Path.GetFullPath(item.Text));
+                }
+
+                _moveStyle = MoveStyle.Copy;
+            }
         };
         
         Console.CursorVisible = false;
         Console.Clear();
         
-        menu = new();
-        Task.Run(async () =>
+        Task.Run(() =>
         {
-            await refreshCancelSource.CancelAsync();
-            refreshCancelSource = new();
+            _refreshCancelSource.Cancel();
+            _refreshCancelSource = new();
 
-            var token = refreshCancelSource.Token;
-            await RefreshMenuItems(token);
+            CancellationToken token = _refreshCancelSource.Token;
+            RefreshMenuItems(token);
         });
 
         Thread inputThread = new(() =>
@@ -83,73 +132,85 @@ class Program
         
         while (true)
         {
-            if (commandLine != null)
+            if (_commandLine != null)
             {
                 Thread.Sleep(50);
                 continue;
             }
             
-            lock (menuLock)
+            int consoleWidth = Console.WindowWidth;
+            int consoleHeight = Console.WindowHeight;
+            
+            lock (MenuLock)
             {
                 Console.SetCursorPosition(0, 0);
-                Console.WriteLine($"{AnsiColor.Reset} File-Explorer ({Directory.GetCurrentDirectory()})");
-
-                string[] menuItems = menu.GetMenuString().Split("\n");
-                StringBuilder builder = new();
-            
-                int consoleWidth = Console.WindowWidth;
-                int consoleHeight = Console.WindowHeight;
+                Console.WriteLine($"{AnsiColorF.Reset} File-Explorer ({Directory.GetCurrentDirectory()})");
                 
-                menuViewRange = consoleHeight - 5;
-                if (menu.SelectedIndex > menuViewIndex + menuViewRange - 1)
+                _menuViewRange = consoleHeight - 6;
+                if (Menu.SelectedIndex - _menuScrollOvershoot < _menuViewIndex)
                 {
-                    menuViewIndex = menu.SelectedIndex - menuViewRange + 1;
+                    _menuViewIndex = Math.Max(Menu.SelectedIndex - _menuScrollOvershoot, 0);
                 }
-                else if (menu.SelectedIndex < menuViewIndex)
+                else if (Menu.SelectedIndex + _menuScrollOvershoot + 1 > _menuViewIndex + _menuViewRange)
                 {
-                    menuViewIndex = menu.SelectedIndex;
+                    _menuViewIndex = Math.Min(Menu.SelectedIndex - _menuViewRange + 1 + _menuScrollOvershoot, Menu.GetItemCount() - _menuViewRange);
                 }
 
-                for (int i = menuViewIndex; i < Math.Min(menuViewIndex + menuViewRange, menu.GetItemCount()); i++)
+                StringBuilder builder = new();
+                for (int i = _menuViewIndex; i < Math.Min(_menuViewIndex + _menuViewRange, Menu.GetItemCount()); i++)
                 {
-                    builder.Append(menuItems[i]);
-                    builder.Append(new String(' ', consoleWidth - menuItems[i].Length));
-                    builder.Append("\n");
-
-                    if (i == Math.Min(menuViewIndex + menuViewRange, menu.GetItemCount()) - 1 && menuViewIndex + menuViewRange >= menu.GetItemCount())
+                    builder.Append("\x1b[2K");
+                    if (_selectedItems.Contains(Menu.GetItemAt(i)))
                     {
-                        builder.Append(new String(' ', consoleWidth) + "\n");
-                        builder.Append(new String(' ', consoleWidth));
+                        builder.Append(AnsiColorF.Reset);
+                        builder.Append(i == Menu.SelectedIndex ? " > " : "   ");
+                        
+                        builder.Append(AnsiColorB.White);
+                        builder.Append(AnsiColorF.Black);
+                        builder.Append(Menu.GetItemAt(i).Text);
+                        builder.Append(AnsiColorB.Reset);
+                        builder.Append(AnsiColorF.Reset);
                     }
+                    else
+                    {
+                        builder.Append(Menu.SelectedIndex == i ? AnsiColorF.Reset + " > " : "   ");
+                        builder.Append(Menu.GetItemAt(i));
+                    }
+                    
+                    builder.Append("\n");
                 }
             
                 Console.WriteLine(builder);
-                if (menuViewIndex + menuViewRange < menu.GetItemCount())
+                if (_menuViewIndex + _menuViewRange < Menu.GetItemCount())
                 {
-                    Console.WriteLine($"{AnsiColor.Reset} --MORE--");
+                    Console.WriteLine($"{AnsiColorF.Reset} --MORE--");
                 }
-
-                if (Console.WindowHeight != consoleHeight)
+                else
                 {
-                    if (Console.WindowHeight >= menuViewIndex + menuViewRange - 1)
-                    {
-                        menuViewIndex = 0;
-                    }
-                
-                    Console.Clear();
+                    Console.Write("\x1b[2K");
                 }
             }
             
             Thread.Sleep(10);
+            if (Console.WindowHeight != consoleHeight || Console.WindowWidth != consoleWidth)
+            {
+                if (Console.WindowHeight >= _menuViewIndex + _menuViewRange - 1)
+                {
+                    _menuViewIndex = 0;
+                }
+                
+                Console.Clear();
+            }
         }
     }
 
-    private static async Task RefreshMenuItems(CancellationToken token)
+    private static void RefreshMenuItems(CancellationToken token)
     {
         if (token.IsCancellationRequested) return;
-        lock (menuLock)
+        lock (MenuLock)
         {
-            menu.ClearItems();
+            _selectedItems.Clear();
+            Menu.ClearItems();
         }
         
         Action onClickFile = OnClickFile;
@@ -157,111 +218,135 @@ class Program
      
         if (Directory.GetParent(Directory.GetCurrentDirectory()) != null)
         {
-            MenuItem item = new("..", AnsiColor.White);
+            MenuItem item = new("..", AnsiColorF.White);
             Action onClickDir = () => OnClickDir(item);
             item.OnClickListener = onClickDir;
             
-            lock (menuLock)
+            lock (MenuLock)
             {
-                menu.AddItem(item);
+                Menu.AddItem(item);
             }
         }
 
         IEnumerable<string?> dirPaths = Directory.EnumerateDirectories(Directory.GetCurrentDirectory(), "*", SearchOption.TopDirectoryOnly);
-        List<string?> dirNames = dirPaths.Select(Path.GetFileName).ToList();
-        dirNames.Sort((a, b) => string.Compare(a, b));
+        List<string> dirNames = dirPaths.Select(Path.GetFileName).Select(file => file ?? "Missing Name").ToList();
+        dirNames.Sort(string.Compare);
         
-        foreach (string? dir in dirNames)
+        foreach (string dir in dirNames)
         {
-            if (dir == null) continue;
+            if (_search != null && !dir.ToLower().Contains(_search.ToLower())) continue;
             
-            MenuItem item = new(dir, AnsiColor.Blue);
+            MenuItem item = new(dir, AnsiColorF.Blue);
             Action onClickDir = () => OnClickDir(item);
             item.OnClickListener = onClickDir;
             
             if (RequiresElevatedAccess(dir) && Environment.UserName != "root")
             {
-                item.Suffix += $"{AnsiColor.Orange} (Access Denied)";
+                item.Suffix += $"{AnsiColorF.Orange} (Access Denied)";
                 item.OnClickListener = null;
             }
             
             if ((File.GetAttributes(dir) & FileAttributes.Hidden) != 0)
             {
-                item.Suffix += $"{AnsiColor.Gray} (Hidden)";
+                if (!_showHiddenFiles)
+                {
+                    continue;
+                }
+                
+                item.Suffix += $"{AnsiColorF.Gray} (Hidden)";
             }
             
-            lock (menuLock)
+            lock (MenuLock)
             {
                 if (token.IsCancellationRequested) return;
-                menu.AddItem(item);
+                Menu.AddItem(item);
             }
         }
         
         IEnumerable<string?> filePaths = Directory.EnumerateFiles(Directory.GetCurrentDirectory(), "*", SearchOption.TopDirectoryOnly);
-        List<string?> fileNames = filePaths.Select(Path.GetFileName).ToList();
-        fileNames.Sort((a, b) => string.Compare(a, b));
+        List<string> fileNames = filePaths.Select(Path.GetFileName).Select(file => file ?? "Missing Name").ToList();
+        fileNames.Sort(string.Compare);
         
-        foreach (string? file in fileNames)
+        foreach (string file in fileNames)
         {
-            if (file == null) continue;
+            if (_search != null && !file.ToLower().Contains(_search.ToLower())) continue;
             
             MenuItem item = new(file, onClickListener: onClickFile);
             if (IsExecutable(file))
             {
-                item.Color = AnsiColor.Green;
+                item.Color = AnsiColorF.Green;
                 item.OnClickListener = onClickExec;
             }
+            
+            if ((File.GetAttributes(file) & FileAttributes.Hidden) != 0)
+            {
+                if (!_showHiddenFiles)
+                {
+                    continue;
+                }
+                
+                item.Suffix += $"{AnsiColorF.Gray} (Hidden)";
+            }
 
-            lock (menuLock)
+            lock (MenuLock)
             {
                 if (token.IsCancellationRequested) return;
-                menu.AddItem(item);
+                Menu.AddItem(item);
             }
         }
 
-        lock (menuLock)
+        lock (MenuLock)
         {
-            if (menu.SelectedIndex >= menu.GetItemCount())
+            if (Menu.GetItemCount() == 0 && _search != null)
             {
-                menu.SelectedIndex = menu.GetItemCount() - 1;
+                _search = null;
+                RefreshMenuItems(token);
             }
+            if (Menu.SelectedIndex >= Menu.GetItemCount())
+            {
+                Menu.SelectedIndex = Menu.GetItemCount() - 1;
+                _menuViewIndex = Math.Max(Menu.GetItemCount() - _menuViewRange, 0);
+            }
+
+            Console.Clear();
         }
     }
     
     private static void OnClickDir(MenuItem sender, bool saveToHistory = true)
     {
-        lock (menuLock)
+        _search = null;
+        lock (MenuLock)
         {
             Console.Clear();
-            menu.ClearItems();
+            Menu.ClearItems();
         }
 
         if (saveToHistory)
         {
-            dirHistory.Push(Path.GetFullPath(Directory.GetCurrentDirectory()));
+            _dirHistory.Push(Path.GetFullPath(Directory.GetCurrentDirectory()));
         }
         
         Directory.SetCurrentDirectory(sender.Text);
-        Task.Run(async () =>
+        Task.Run(() =>
         {
-            await refreshCancelSource.CancelAsync();
-            refreshCancelSource = new();
+            _refreshCancelSource.Cancel();
+            _refreshCancelSource = new();
 
-            var token = refreshCancelSource.Token;
-            await RefreshMenuItems(token);
+            CancellationToken token = _refreshCancelSource.Token;
+            RefreshMenuItems(token);
         });
         
         Thread.Sleep(5);
-        if (menu.SelectedIndex != 0 && menu.GetItemCount() > 1)
+        if (Menu.SelectedIndex != 0 && Menu.GetItemCount() > 1)
         {
-            menu.SelectedIndex = 1;
+            Menu.SelectedIndex = 1;
         }
         else
         {
-            menu.SelectedIndex = 0;
+            Menu.SelectedIndex = 0;
         }
 
-        menuViewIndex = 0;
+        _menuViewIndex = 0;
     }
 
     private static void OnClickFile()
@@ -316,39 +401,428 @@ class Program
                     proc.Start();
                 break;
                 
-                case ConsoleKey.B:
-                    if (dirHistory.Count > 0)
+                case ConsoleKey.A:
+                    foreach (MenuItem item in Menu.GetItems())
                     {
-                        OnClickDir(new(dirHistory.Pop()), false);
+                        if (item.Text == "..")
+                        {
+                            continue;
+                        }
+                        
+                        if (!_selectedItems.Contains(item))
+                        {
+                            _selectedItems.Add(item);
+                        }
+                    }
+                break;
+                
+                case ConsoleKey.B:
+                    if (_dirHistory.Count > 0)
+                    {
+                        OnClickDir(new(_dirHistory.Pop()), false);
                     }
                 break;
                 
                 case ConsoleKey.UpArrow:
-                    lock (menuLock)
+                    lock (MenuLock)
                     {
-                        menu.SelectedIndex = 0;
-                        menuViewIndex = 0;
+                        Menu.SelectedIndex = 0;
+                        _menuViewIndex = 0;
                     }
 
                 break;
                 
                 case ConsoleKey.DownArrow:
-                    lock (menuLock)
+                    lock (MenuLock)
                     {
-                        menu.SelectedIndex = menu.GetItemCount() - 1;
-                        menuViewIndex = menu.GetItemCount() - menuViewRange;
+                        Menu.SelectedIndex = Menu.GetItemCount() - 1;
+                        _menuViewIndex = Math.Max(Menu.GetItemCount() - _menuViewRange, 0);
                     }
                 break;
                 
                 case ConsoleKey.R:
-                    Task.Run(async () =>
+                    Task.Run(() =>
                     {
-                        await refreshCancelSource.CancelAsync();
-                        refreshCancelSource = new();
+                        _refreshCancelSource.Cancel();
+                        _refreshCancelSource = new();
 
-                        var token = refreshCancelSource.Token;
-                        await RefreshMenuItems(token);
+                        CancellationToken token = _refreshCancelSource.Token;
+                        RefreshMenuItems(token);
                     });
+                break;
+                
+                case ConsoleKey.T:
+                    lock (MenuLock)
+                    {
+                        _showHiddenFiles = !_showHiddenFiles;
+                        Task.Run(() =>
+                        {
+                            _refreshCancelSource.Cancel();
+                            _refreshCancelSource = new();
+                            
+                            Console.Clear();
+                            Menu.ClearItems();
+                            
+                            CancellationToken token = _refreshCancelSource.Token;
+                            RefreshMenuItems(token);
+                        });
+                    }
+                break;
+                
+                case ConsoleKey.F:
+                    lock (MenuLock)
+                    {
+                        Console.CursorVisible = true;
+                        Console.Write($"{AnsiColorF.Reset} Search: ");
+                        string? search = ReadLine();
+                        
+                        Console.CursorVisible = false;
+                        if (search == null)
+                        {
+                            Console.Clear();
+                            return;
+                        }
+                        
+                        _search = search;
+                        Task.Run(() =>
+                        {
+                            _refreshCancelSource.Cancel();
+                            _refreshCancelSource = new();
+
+                            _menuViewIndex = 0;
+                            Menu.SelectedIndex = 0;
+                            
+                            Console.Clear();
+                            Menu.ClearItems();
+                            
+                            CancellationToken token = _refreshCancelSource.Token;
+                            RefreshMenuItems(token);
+                        });
+                    }
+                break;
+
+                case ConsoleKey.N:
+                    lock (MenuLock)
+                    {
+                        Console.CursorVisible = true;
+
+                        string? name;
+                        if ((keyInfo.Modifiers & ConsoleModifiers.Alt) != 0)
+                        {
+                            Console.Write($"{AnsiColorF.Reset} Directory name: ");
+                            name = ReadLine();
+                            
+                            Console.CursorVisible = false;
+                            if (name == null)
+                            {
+                                Console.Clear();
+                                return;
+                            }
+                            
+                            try
+                            {
+                                Directory.CreateDirectory(name);
+                            }
+                            catch (Exception)
+                            {
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            Console.Write($"{AnsiColorF.Reset} File name: ");
+                            name = ReadLine();
+                            
+                            Console.CursorVisible = false;
+                            if (name == null)
+                            {
+                                Console.Clear();
+                                return;
+                            }
+
+                            try
+                            {
+                                File.Create(name).Close();
+                            }
+                            catch (Exception)
+                            {
+                                return;
+                            }
+                        }
+                        
+                        Console.Clear();
+                        Task.Run(() =>
+                        {
+                            _refreshCancelSource.Cancel();
+                            _refreshCancelSource = new();
+
+                            CancellationToken token = _refreshCancelSource.Token;
+                            RefreshMenuItems(token);
+                            Menu.SelectedIndex = Menu.IndexOf(name);
+                        });
+                    }
+                break;
+                
+                case ConsoleKey.W:
+                    lock (MenuLock)
+                    {
+                        Console.CursorVisible = true;
+                        Console.Write($"{AnsiColorF.Reset} Path of directory: ");
+                        string? input = ReadLine();
+
+                        if (input == null)
+                        {
+                            Console.CursorVisible = false;
+                            Console.Clear();
+
+                            return;
+                        }
+
+                        if (Directory.Exists(input))
+                        {
+                            _dirHistory.Push(Directory.GetCurrentDirectory());
+                            Directory.SetCurrentDirectory(input);
+                        }
+
+                        Console.CursorVisible = false;
+                        Console.Clear();
+                        
+                        Task.Run(() =>
+                        {
+                            _refreshCancelSource.Cancel();
+                            _refreshCancelSource = new();
+
+                            CancellationToken token = _refreshCancelSource.Token;
+                            RefreshMenuItems(token);
+                        });
+                    }
+                break;
+                
+                // Handled in the CancelKeyPressed event
+                /*case ConsoleKey.C:
+
+                break;*/
+                
+                case ConsoleKey.X:
+                    lock (MenuLock)
+                    {
+                        _moveItems.Clear();
+                        if (_selectedItems.Count > 0)
+                        {
+                            _moveItems.AddRange(_selectedItems.Select(item => Path.GetFullPath(item.Text)));
+                            Console.WriteLine(_moveItems.ToString());
+                            Thread.Sleep(3000);
+                        }
+                        else
+                        {
+                            MenuItem? item = Menu.GetItemAt(Menu.SelectedIndex);
+                            if (item?.Text == "..")
+                            {
+                                return;
+                            }
+                        
+                            _moveItems.Add(Path.GetFullPath(item.Text));
+                        }
+
+                        _moveStyle = MoveStyle.Cut;
+                    }
+                break;
+                
+                case ConsoleKey.V:
+                    lock (MenuLock)
+                    {
+                        if (_moveStyle == MoveStyle.Cut)
+                        {
+                            foreach (string itemPath in _moveItems)
+                            {
+                                try
+                                {
+                                    string name = Path.GetFileName(itemPath);
+                                    if (Directory.Exists(itemPath))
+                                    {
+                                        Directory.Move(itemPath, name);
+                                        _selectedItems.Add(Menu.GetItemByName(name));
+                                    }
+                                    else if (File.Exists(itemPath))
+                                    {
+                                        File.Move(itemPath, name);
+                                        _selectedItems.Add(Menu.GetItemByName(name));
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                        else if (_moveStyle == MoveStyle.Copy)
+                        {
+                            foreach (string itemPath in _moveItems)
+                            {
+                                try
+                                {
+                                    if (Directory.Exists(itemPath))
+                                    {
+                                        CopyDirectory(itemPath, Path.GetFileName(itemPath));
+                                    }
+                                    else if (File.Exists(itemPath))
+                                    {
+                                        File.Copy(itemPath, Path.GetFileName(itemPath));
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+                        else
+                        {
+                            return;
+                        }
+                        
+                        _moveStyle = MoveStyle.None;
+                        Console.Clear();
+                        Task.Run(() =>
+                        {
+                            _refreshCancelSource.Cancel();
+                            _refreshCancelSource = new();
+
+                            CancellationToken token = _refreshCancelSource.Token;
+                            RefreshMenuItems(token);
+                        });
+                    }
+                break;
+            }
+        }
+        else if ((keyInfo.Modifiers & ConsoleModifiers.Shift) != 0)
+        {
+            switch (keyInfo.Key)
+            {
+                case ConsoleKey.Delete:
+                    lock (MenuLock)
+                    {
+                        List<MenuItem> items = [];
+                        Console.CursorVisible = true;
+                        if (_selectedItems.Count > 1)
+                        {
+                            items.AddRange(_selectedItems);
+                            string? input;
+                            
+                            do
+                            {
+                                Console.Write($"{AnsiColorF.Reset} Are you sure you want to permanently delete {_selectedItems.Count} items? [y/n]: ");
+                                input = ReadLine()?.Trim();
+                                
+                                if (input == null || input == "n")
+                                {
+                                    Console.CursorVisible = false;
+                                    Console.Clear();
+                                    
+                                    return;
+                                }
+                            } while (input != "y");
+                        }
+                        else
+                        {
+                            MenuItem item = Menu.GetItemAt(Menu.SelectedIndex);
+                            if (_selectedItems.Count == 1)
+                            {
+                                item = _selectedItems[0];
+                            }
+
+                            if (item.Text == "..")
+                            {
+                                Console.CursorVisible = false;
+                                return;
+                            }
+
+                            items.Add(item);
+                            string? input;
+                            
+                            do
+                            {
+                                Console.Write($"{AnsiColorF.Reset} Are you sure you want to permanently delete '{item.Text}'? [y/n]: ");
+                                input = ReadLine()?.Trim();
+                                
+                                if (input == null || input == "n")
+                                {
+                                    Console.CursorVisible = false;
+                                    Console.Clear();
+                                    
+                                    return;
+                                }
+                            } while (input != "y");
+                        }
+
+                        foreach (string item in items.Select(item => item.Text))
+                        {
+                            try
+                            {
+                                if (Directory.Exists(item))
+                                {
+                                    Directory.Delete(item, true);
+                                    
+                                    List<string> tempHistory = new(_dirHistory);
+                                    tempHistory = tempHistory.Where(path => !path.Contains(Path.GetFullPath(item))).ToList();
+
+                                    _dirHistory = new(tempHistory);
+                                }
+                                else if (File.Exists(item))
+                                {
+                                    File.Delete(item);
+                                }
+                            }
+                            catch { }
+                        }
+                        
+                        Console.CursorVisible = false;
+                        Console.Clear();
+                        
+                        Task.Run(() =>
+                        {
+                            _refreshCancelSource.Cancel();
+                            _refreshCancelSource = new();
+
+                            CancellationToken token = _refreshCancelSource.Token;
+                            RefreshMenuItems(token);
+                        });
+                    }
+                break;
+            }
+        }
+        else if ((keyInfo.Modifiers & ConsoleModifiers.Alt) != 0)
+        {
+            switch (keyInfo.Key)
+            {
+                case ConsoleKey.Spacebar:
+                    int lastSelectedIndex = Menu.IndexOf(_selectedItems.LastOrDefault());
+                    if (lastSelectedIndex == -1 || lastSelectedIndex == Menu.SelectedIndex)
+                    {
+                        SelectItem();
+                        return;
+                    }
+
+                    if (lastSelectedIndex < Menu.SelectedIndex)
+                    {
+                        for (int i = lastSelectedIndex + 1; i <= Menu.SelectedIndex; i++)
+                        {
+                            MenuItem? item = Menu.GetItemAt(i);
+                            if (item?.Text == "..") continue;
+                        
+                            if (!_selectedItems.Contains(item))
+                            {
+                                _selectedItems.Add(item);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        for (int i = lastSelectedIndex - 1; i >= Menu.SelectedIndex; i--)
+                        {
+                            MenuItem? item = Menu.GetItemAt(i);
+                            if (item?.Text == "..") continue;
+                        
+                            if (!_selectedItems.Contains(item))
+                            {
+                                _selectedItems.Add(item);
+                            }
+                        }
+                    }
                 break;
             }
         }
@@ -356,46 +830,340 @@ class Program
         {
             switch (keyInfo.Key)
             {
-                case ConsoleKey.UpArrow: menu.MoveSelected(-1); break;
-                case ConsoleKey.DownArrow: menu.MoveSelected(1); break;
+                case ConsoleKey.UpArrow: Menu.MoveSelected(-1); break;
+                case ConsoleKey.DownArrow: Menu.MoveSelected(1); break;
                 
-                case ConsoleKey.Spacebar:
                 case ConsoleKey.Enter:
-                    menu.CallSelectedItemClick();
+                    Menu.CallSelectedItemClick();
                 break;
                 
                 case ConsoleKey.Escape:
-                    menu.SelectedIndex = 0;
-                    OnClickDir(new MenuItem(".."));
+                    if (_search != null || _selectedItems.Count > 0)
+                    {
+                        if (_search != null)
+                        {
+                            _search = null;
+                        
+                            Console.Clear();
+                            Task.Run(() =>
+                            {
+                                _refreshCancelSource.Cancel();
+                                _refreshCancelSource = new();
+
+                                CancellationToken token = _refreshCancelSource.Token;
+                                RefreshMenuItems(token);
+                            });
+                        }
+                        if (_selectedItems.Count > 0)
+                        {
+                            _selectedItems.Clear();
+                        }
+                    }
+                    else
+                    {
+                        if (Menu.GetItems().Where(item => item.Text == "..").ToList().Count == 0)
+                        {
+                            return;
+                        }
+                        
+                        Menu.SelectedIndex = 0;
+                        OnClickDir(new MenuItem(".."));
+                    }
                 break;
                 
                 case ConsoleKey.Home:
-                    lock (menuLock)
+                    lock (MenuLock)
                     {
-                        menu.SelectedIndex = 0;
-                        menuViewIndex = 0;
+                        Menu.SelectedIndex = 0;
+                        _menuViewIndex = 0;
                     }
                 break;
                 
                 case ConsoleKey.End:
-                    lock (menuLock)
+                    lock (MenuLock)
                     {
-                        menu.SelectedIndex = menu.GetItemCount() - 1;
-                        menuViewIndex = menu.GetItemCount() - menuViewRange;
+                        Menu.SelectedIndex = Menu.GetItemCount() - 1;
+                        _menuViewIndex = Math.Max(Menu.GetItemCount() - _menuViewRange, 0);
                     }
                 break;
                 
                 case ConsoleKey.F5:
-                    Task.Run(async () =>
+                    Console.Clear();
+                    Task.Run(() =>
                     {
-                        await refreshCancelSource.CancelAsync();
-                        refreshCancelSource = new();
+                        _refreshCancelSource.Cancel();
+                        _refreshCancelSource = new();
 
-                        var token = refreshCancelSource.Token;
-                        await RefreshMenuItems(token);
+                        CancellationToken token = _refreshCancelSource.Token;
+                        RefreshMenuItems(token);
                     });
                 break;
+                
+                case ConsoleKey.F2:
+                    lock (MenuLock)
+                    {
+                        if (Menu.GetItemAt(Menu.SelectedIndex).Text == "..")
+                        {
+                            return;
+                        }
+                        
+                        Console.CursorVisible = true;
+                        Console.Write($"{AnsiColorF.Reset} Rename to: ");
+
+                        string? name = ReadLine()?.Trim();
+                        if (name == null)
+                        {
+                            Console.CursorVisible = false;
+                            Console.Clear();
+                            
+                            return;
+                        }
+                        
+                        char[] invalidNameChars = Path.GetInvalidFileNameChars();
+                        if (Encoding.Latin1.GetByteCount(name) != name.Length || name?.ToCharArray().Where(c => invalidNameChars.Contains(c)).ToList().Count > 0 || Menu.GetItemsClone().Select(item => item.Text).Contains(name) || name == "..")
+                        {
+                            Console.CursorVisible = false;
+                            Console.Clear();
+                            
+                            return;
+                        }
+
+                        string? input = "";
+                        while (input != "y" && input != "n")
+                        {
+                            Console.Write($"{AnsiColorF.Reset} Are you sure? [y/n]: ");
+                            input = Console.ReadLine()?.Trim();
+                        }
+
+                        if (input == "n")
+                        {
+                            Console.CursorVisible = false;
+                            Console.Clear();
+                            
+                            return;
+                        }
+                        
+                        try
+                        {
+                            MenuItem? item = Menu.GetItemAt(Menu.SelectedIndex);
+                            if (Directory.Exists(item?.Text))
+                            {
+                                Directory.Move(item.Text, name);
+                                
+                                List<string> dirHistoryList = _dirHistory.ToList();
+                                _dirHistory.Clear();
+                                
+                                for (int i = dirHistoryList.Count - 1; i >= 0; i--)
+                                {
+                                    string dirPath = dirHistoryList[i];
+                                    if (dirPath == Path.GetFullPath(item.Text))
+                                    {
+                                        dirPath = Path.GetFullPath(name);
+                                    }
+                                    
+                                    _dirHistory.Push(dirPath);
+                                }
+                            }
+                            else if (File.Exists(item?.Text))
+                            {
+                                File.Move(item.Text, name);
+                            }
+                            
+                            item.Text = name;
+                        }
+                        catch { }
+                        
+                        Console.CursorVisible = false;
+                        Console.Clear();
+                    }
+                break;
+                
+                case ConsoleKey.F10:
+                    lock (MenuLock)
+                    {
+                        Console.CursorVisible = true;
+                        Console.Clear();
+                        Environment.Exit(0);
+                    }
+                break;
+                
+                case ConsoleKey.Spacebar:
+                    SelectItem();
+                break;
+                
+                case ConsoleKey.Delete:
+                    lock (MenuLock)
+                    {
+                        List<MenuItem> items = [];
+                        Console.CursorVisible = true;
+                        if (_selectedItems.Count > 1)
+                        {
+                            items.AddRange(_selectedItems);
+                            string? input;
+                            
+                            do
+                            {
+                                Console.Write($"{AnsiColorF.Reset} Are you sure you want to move {_selectedItems.Count} items to the recycle bin? [y/n]: ");
+                                input = ReadLine()?.Trim();
+                                
+                                if (input == null || input == "n")
+                                {
+                                    Console.CursorVisible = false;
+                                    Console.Clear();
+                                    
+                                    return;
+                                }
+                            } while (input != "y");
+                        }
+                        else
+                        {
+                            MenuItem? item = Menu.GetItemAt(Menu.SelectedIndex);
+                            if (_selectedItems.Count == 1)
+                            {
+                                item = _selectedItems[0];
+                            }
+
+                            if (item?.Text == "..")
+                            {
+                                Console.CursorVisible = false;
+                                return;
+                            }
+
+                            items.Add(item);
+                            string? input;
+                            
+                            do
+                            {
+                                Console.Write($"{AnsiColorF.Reset} Are you sure you want to move '{item.Text}' to the recycle bin? [y/n]: ");
+                                input = ReadLine()?.Trim();
+                                
+                                if (input == null || input == "n")
+                                {
+                                    Console.CursorVisible = false;
+                                    Console.Clear();
+                                    
+                                    return;
+                                }
+                            } while (input != "y");
+                        }
+
+                        try
+                        {
+                            foreach (string item in items.Select(item => item.Text))
+                            {
+                                if (Directory.Exists(item))
+                                {
+                                    List<string> tempHistory = new(_dirHistory);
+                                    tempHistory = tempHistory.Where(path => !path.Contains(Path.GetFullPath(item))).ToList();
+
+                                    _dirHistory = new(tempHistory);
+                                }
+
+                                ProcessStartInfo startInfo = new ProcessStartInfo
+                                {
+                                    FileName = "gio",
+                                    Arguments = $"trash \"{item}\"",
+                                    RedirectStandardInput = true,
+                                    RedirectStandardOutput = true,
+                                    RedirectStandardError = true
+                                };
+                                
+                                Process proc = new();
+                                proc.StartInfo = startInfo;
+                                
+                                proc.Start();
+                                proc.WaitForExit();
+                            }
+                        }
+                        catch { }
+                        
+                        Console.CursorVisible = false;
+                        Console.Clear();
+                        
+                        Task.Run(() =>
+                        {
+                            _refreshCancelSource.Cancel();
+                            _refreshCancelSource = new();
+
+                            CancellationToken token = _refreshCancelSource.Token;
+                            RefreshMenuItems(token);
+                        });
+                    }
+                break;
             }
+        }
+    }
+
+    private static void SelectItem()
+    {
+        MenuItem? item = Menu.GetItemAt(Menu.SelectedIndex);
+        if (item?.Text == "..") return;
+                    
+        if (!_selectedItems.Remove(item))
+        {
+            _selectedItems.Add(item);
+        }
+    }
+
+    private static string? ReadLine()
+    {
+        StringBuilder builder = new();
+        while (true)
+        {
+            if (Console.KeyAvailable)
+            {
+                var keyInfo = Console.ReadKey(intercept: true);
+
+                if (keyInfo.Key == ConsoleKey.Escape)
+                {
+                    builder.Clear();
+                    break;
+                }
+                else if (keyInfo.Key == ConsoleKey.Enter)
+                {
+                    Console.WriteLine();
+                    break;
+                }
+                else if (keyInfo.Key == ConsoleKey.Backspace)
+                {
+                    if (builder.ToString().Length > 0)
+                    {
+                        Console.Write("\b \b");
+                        builder.Remove(builder.Length - 1, 1);
+                    }
+                }
+                else
+                {
+                    builder.Append(keyInfo.KeyChar);
+                    Console.Write(keyInfo.KeyChar);
+                }
+            }
+        }
+        
+        return string.IsNullOrEmpty(builder.ToString()) ? null : builder.ToString();
+    }
+    
+    private static void CopyDirectory(string sourceDir, string destinationDir)
+    {
+        DirectoryInfo dir = new(sourceDir);
+        if (!dir.Exists)
+        {
+            throw new DirectoryNotFoundException($"Source directory not found: {dir.FullName}");
+        }
+
+        DirectoryInfo[] dirs = dir.GetDirectories();
+        Directory.CreateDirectory(destinationDir);
+
+        foreach (FileInfo file in dir.GetFiles())
+        {
+            string targetFilePath = Path.Combine(destinationDir, file.Name);
+            file.CopyTo(targetFilePath);
+        }
+
+        foreach (DirectoryInfo subDir in dirs)
+        {
+            string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+            CopyDirectory(subDir.FullName, newDestinationDir);
         }
     }
     
@@ -404,7 +1172,7 @@ class Program
         Console.CursorVisible = true;
         
         string shell = Environment.GetEnvironmentVariable("SHELL") ?? "/bin/bash";
-        commandLine = new Process
+        _commandLine = new Process
         {
             StartInfo = new ProcessStartInfo
             {
@@ -417,31 +1185,23 @@ class Program
             }
         };
         
-        ConsoleCancelEventHandler? handler = (sender, e) =>
+        lock (MenuLock)
         {
-            if (commandLine != null && !commandLine.HasExited)
-            {
-                commandLine.Kill();
-            }
-        };
-
-        Console.CancelKeyPress += handler;
+            _commandLine.Start();
+        }
         
-        commandLine.Start();
-        commandLine.WaitForExit();
-        commandLine = null;
+        _commandLine.WaitForExit();
+        _commandLine = null;
         
-        Console.CancelKeyPress -= handler;
         Console.CursorVisible = false;
-        Console.Clear();
-        
-        Task.Run(async () =>
+        Task.Run(() =>
         {
-            await refreshCancelSource.CancelAsync();
-            refreshCancelSource = new();
-
-            var token = refreshCancelSource.Token;
-            await RefreshMenuItems(token);
+            _refreshCancelSource.Cancel();
+            _refreshCancelSource = new();
+                            
+            Console.Clear();
+            CancellationToken token = _refreshCancelSource.Token;
+            RefreshMenuItems(token);
         });
     }
     

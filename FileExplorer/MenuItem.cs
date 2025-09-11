@@ -7,10 +7,11 @@ public class MenuItem
     public string Color { get; set; }
     public Action? OnClickListener { get; set; }
 
-    public MenuItem(string text, string color = AnsiColor.Reset, Action? onClickListener = null)
+    public MenuItem(string text, string foregroundColor = AnsiColorF.Reset, Action? onClickListener = null)
     {
         Text = text;
-        Color = color;
+        Suffix = "";
+        Color = foregroundColor;
         OnClickListener = onClickListener;
     }
     
@@ -20,5 +21,10 @@ public class MenuItem
         OnClickListener?.Invoke();
         
         return true;
+    }
+
+    public override string ToString()
+    {
+        return Color + Text + Suffix;
     }
 }

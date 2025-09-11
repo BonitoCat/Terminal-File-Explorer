@@ -1,67 +1,99 @@
+using System.Text;
+
 namespace FileExplorer;
 
 public class Menu
 {
-    private readonly object itemsLock = new();
-    private List<MenuItem> Items { get; } = new();
+    private readonly object _itemsLock = new();
+    private readonly List<MenuItem> _items = new();
 
     public int SelectedIndex { get; set; } = 0;
-
-    public string GetMenuString()
-    {
-        lock (itemsLock)
-        {
-            string str = "";
-            for (int i = 0; i < Items.Count; i++)
-            {
-                str += SelectedIndex == i ? AnsiColor.Reset + " > " : "   ";
-                str += Items[i].Color + Items[i].Text + Items[i].Suffix + "\n";
-            }
-
-            return str;
-        }
-    }
-
+    
     public void AddItem(MenuItem item)
     {
-        lock (itemsLock)
+        lock (_itemsLock)
         {
-            Items.Add(item);
+            _items.Add(item);
         }
     }
     
-    public MenuItem GetItem(int index)
+    public MenuItem? GetItemByName(string name)
     {
-        lock (itemsLock)
+        lock (_itemsLock)
         {
-            return Items[index];
+            return _items.FirstOrDefault(item => item.Text == name);
+        }
+    }
+
+    public MenuItem? GetItemAt(int index)
+    {
+        lock (_itemsLock)
+        {
+            if (index < 0 || index >= _items.Count)
+            {
+                return null;
+            }
+        
+            return _items[index];   
+        }
+    }
+
+    public int IndexOf(MenuItem? item)
+    {
+        lock (_itemsLock)
+        {
+            return _items.IndexOf(item);
+        }
+    }
+    
+    public int IndexOf(string name)
+    {
+        lock (_itemsLock)
+        {
+            return _items.Select(item => item.Text).ToList().IndexOf(name);
+        }
+    }
+
+    public List<MenuItem> GetItems()
+    {
+        return _items;
+    }
+
+    public List<MenuItem> GetItemsClone()
+    {
+        lock (_itemsLock)
+        {
+            return new List<MenuItem>(_items);
         }
     }
 
     public int GetItemCount()
     {
-        lock (itemsLock)
+        lock (_itemsLock)
         {
-            return Items.Count;
+            return _items.Count;
         }
     }
     
     public void ClearItems()
     {
-        lock (itemsLock)
+        lock (_itemsLock)
         {
-            Items.Clear();
+            _items.Clear();
         }
     }
 
     public void MoveSelected(int dir)
     {
         dir = Math.Sign(dir);
-        SelectedIndex = (SelectedIndex + dir + Items.Count) % Items.Count;
+        lock (_itemsLock)
+        {
+            SelectedIndex = (SelectedIndex + dir + _items.Count) % _items.Count;
+        }
     }
 
     public bool CallSelectedItemClick()
     {
-        return Items[SelectedIndex].CallClick();
+        return _items[SelectedIndex].CallClick();
     }
 }

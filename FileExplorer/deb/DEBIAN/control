@@ -1,0 +1,6 @@
+Package: fe
+Version: 1.0.0
+Section: utils
+Architecture: amd64
+Maintainer: BonitoCat
+Description: An advanced file explorer for the terminal

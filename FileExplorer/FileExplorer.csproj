@@ -7,4 +7,14 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+      <Reference Include="InputLib">
+        <HintPath>..\InputLib.dll</HintPath>
+      </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\InputLib\InputLib\InputLib.csproj" />
+    </ItemGroup>
+
 </Project>

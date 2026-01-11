@@ -8,13 +8,13 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <Reference Include="InputLib">
-        <HintPath>..\InputLib.dll</HintPath>
-      </Reference>
+      <ProjectReference Include="..\..\CmdMenu\CmdMenu\CmdMenu.csproj" />
+      <ProjectReference Include="..\..\InputLib\InputLib\InputLib.csproj" />
+      <ProjectReference Include="..\..\MetadataGenerator\MetadataGenerator\MetadataGenerator.csproj"
+                        OutputItemType="Analyzer"
+                        ReferenceOutputAssembly="false" />
+      <AdditionalFiles Include="deb-linux-x64/DEBIAN/control" />
     </ItemGroup>
 
-    <ItemGroup>
-      <ProjectReference Include="..\..\InputLib\InputLib\InputLib.csproj" />
-    </ItemGroup>
 
 </Project>

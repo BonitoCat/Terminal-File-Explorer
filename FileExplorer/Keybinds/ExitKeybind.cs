@@ -12,9 +12,10 @@ public class ExitKeybind(MenuContext context, InputListener listener) : Keybind(
         {
             Console.CursorVisible = true;
             Console.Clear();
-                
+            
             InputListener.EnableEcho();
             listener.StopListening();
+            listener.WaitForClose();
             
             Environment.Exit(0);
         }

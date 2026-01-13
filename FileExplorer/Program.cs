@@ -42,8 +42,8 @@ class Program
            | Ctrl + C - Copy item
            | Ctrl + X - Cut item
            | Ctrl + V - Paste item
-           | Ctrl + N - Create new directory
-           | Ctrl + Shift + N - Create new file
+           | Ctrl + N - Create new file
+           | Shift + N - Create new directory
            | Shift + D - Duplicate directory / file
            
            Misc:
@@ -82,6 +82,9 @@ class Program
                     return;
             }
         }
+
+        Thread.Sleep(100);
+        InputListener.Init();
 
         Console.TreatControlCAsInput = true;
         Console.CursorVisible = false;
@@ -218,8 +221,8 @@ class Program
         _keybinds.Add(new ReloadKeybind(_context) { Keys = [Key.LeftCtrl, Key.H] });
         _keybinds.Add(new SearchKeybind(_context) { Keys = [Key.LeftCtrl, Key.F] });
         
-        _keybinds.Add(new NewFolderKeybind(_context) { Keys = [Key.LeftCtrl, Key.LeftShift, Key.N] });
-        _keybinds.Add(new NewFileKeybind(_context) { Keys = [Key.LeftShift, Key.N] });
+        _keybinds.Add(new NewFolderKeybind(_context) { Keys = [Key.LeftShift, Key.N] });
+        _keybinds.Add(new NewFileKeybind(_context) { Keys = [Key.LeftCtrl, Key.N] });
         
         _keybinds.Add(new DirPathKeybind(_context) { Keys = [Key.LeftCtrl, Key.W] });
         

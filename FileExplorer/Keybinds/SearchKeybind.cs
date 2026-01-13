@@ -13,7 +13,7 @@ public class SearchKeybind(MenuContext context) : Keybind(context)
             {
                 Console.CursorVisible = true;
                 Console.Write($"{Color.Reset.ToAnsi()} Search: ");
-                search = _context.ReadLine();
+                search = _context.ReadLine(true);
             
                 Console.CursorVisible = false;
                 if (search == null)

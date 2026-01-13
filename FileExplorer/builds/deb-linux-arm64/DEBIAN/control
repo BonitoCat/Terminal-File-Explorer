@@ -1,5 +1,5 @@
-Package: fe-linux-x64
-Version: 1.1.0
+Package: fe-linux-arm64
+Version: 1.1.1
 Section: utils
 Architecture: amd64
 Maintainer: BonitoCat

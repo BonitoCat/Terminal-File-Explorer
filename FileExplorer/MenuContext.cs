@@ -485,7 +485,7 @@ public class MenuContext
         }
     }
     
-    public string? ReadLine()
+    public string? ReadLine(bool enterNull = false)
     {
         listener?.StopListening();
 
@@ -495,7 +495,7 @@ public class MenuContext
             listener?.StartListening();
             return "";
         }
-
+        
         keyListener.StartListening();
         StringBuilder builder = new();
         string? result = null;
@@ -525,12 +525,20 @@ public class MenuContext
         {
             if (key == Key.Enter)
             {
-                result = string.IsNullOrEmpty(builder.ToString()) ? null : builder.ToString();
+                if (enterNull)
+                {
+                    result = string.IsNullOrEmpty(builder.ToString()) ? null : builder.ToString();
+                }
+                else
+                {
+                    result = string.IsNullOrEmpty(builder.ToString()) ? "y" : builder.ToString();
+                }
+                
                 keyListener.StopListening();
             }
             else if (key == Key.Escape)
             {
-                result = "n";
+                result = null;
                 keyListener.StopListening();
             }
         }

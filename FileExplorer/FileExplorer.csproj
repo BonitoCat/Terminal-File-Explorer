@@ -16,7 +16,6 @@
 
     <ItemGroup>
       <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.2" />
-      <PackageReference Include="Tmds.DBus" Version="0.23.0" />
     </ItemGroup>
 
 

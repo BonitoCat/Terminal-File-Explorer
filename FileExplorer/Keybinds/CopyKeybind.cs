@@ -8,10 +8,12 @@ public class CopyKeybind(MenuContext context) : Keybind(context)
     {
         lock (_context.Menu.Lock)
         {
-            _context.MoveItems.Clear();
             if (_context.SelectedItems.Count > 0)
             {
-                _context.MoveItems.AddRange(_context.SelectedItems.Select(item => Path.GetFullPath(item.Text)));
+                _context.MoveItems.Clear();
+                _context.MoveItems.AddRange(_context.SelectedItems
+                                                    .Select(item => item.Data.GetValueOrDefault("FullPath", ""))
+                                                    .Where(path => !string.IsNullOrEmpty(path)));
             }
             else
             {
@@ -20,8 +22,12 @@ public class CopyKeybind(MenuContext context) : Keybind(context)
                 {
                     return;
                 }
-                
-                _context.MoveItems.Add(Path.GetFullPath(item.Text));
+
+                if (item.Data.TryGetValue("FullPath", out string? path))
+                {
+                    _context.MoveItems.Clear();
+                    _context.MoveItems.Add(path);
+                }
             }
 
             _context.MoveStyle = MoveStyle.Copy;

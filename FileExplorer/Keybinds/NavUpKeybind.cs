@@ -12,10 +12,10 @@ public class NavUpKeybind(MenuContext context) : Keybind(context)
             return;
         }
 
-        if (_context.listener.IsKeyDown(Key.LeftShift))
+        if (_context.Listener.IsKeyDown(Key.LeftShift))
         {
-            _context.listener.RepeatRateMs = 20;
-            _context.listener.RepeatDelayMs = 0;
+            _context.Listener.RepeatRateMs = 20;
+            _context.Listener.RepeatDelayMs = 0;
         }
         
         _context.Menu.MoveSelected(-1);
@@ -24,7 +24,7 @@ public class NavUpKeybind(MenuContext context) : Keybind(context)
 
     public override void OnKeyUp()
     {
-        _context.listener.RepeatRateMs = 30;
-        _context.listener.RepeatDelayMs = 250;
+        _context.Listener.RepeatRateMs = 30;
+        _context.Listener.RepeatDelayMs = 250;
     }
 }

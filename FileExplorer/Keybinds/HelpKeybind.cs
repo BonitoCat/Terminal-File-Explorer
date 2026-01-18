@@ -12,8 +12,10 @@ public class HelpKeybind(MenuContext context, InputListener listener, string hel
             Console.WriteLine(helpString);
             Thread.Sleep(500);
             
-            listener.WaitForKeyInput();
+            listener.WaitForKeyInput(Key.Escape);
             Console.Clear();
+            Thread.Sleep(50);
+            
             _context.RedrawMenu();
         }
     }

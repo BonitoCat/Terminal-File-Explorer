@@ -13,8 +13,8 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
     private void OpenCommandLine()
     {
         InputListener.EnableEcho();
-        _context.listener?.StopListening();
-        _context.listener?.WaitForClose();
+        _context.Listener?.StopListening();
+        _context.Listener?.WaitForClose();
         
         Thread.Sleep(100);
         Console.CursorVisible = true;
@@ -52,6 +52,6 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
         InputListener.DisableEcho();
         Thread.Sleep(100);
         
-        _context.listener?.StartListening();
+        _context.Listener?.StartListening();
     }
 }

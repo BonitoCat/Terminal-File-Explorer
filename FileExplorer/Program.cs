@@ -44,6 +44,7 @@ class Program
            | Space - Select item
            | Shift + Space - Select a region of items
            | Ctrl + A - Select all directories and files
+           | Shift + A - Deselect all directories and files
            | Ctrl + C - Copy item
            | Ctrl + X - Cut item
            | Ctrl + V - Paste item
@@ -105,23 +106,23 @@ class Program
         Console.Clear();
 
         _context.Menu = new();
-        _context.RefreshItems();
+        _context.OnClickDir(new(Directory.GetCurrentDirectory()), false);
         
         InputListener.DisableEcho();
-        _context.listener = InputListener.New();
-        if (_context.listener == null)
+        _context.Listener = InputListener.New();
+        if (_context.Listener == null)
         {
             Console.WriteLine("Could not load input listener");
             return;
         }
         
-        MapKeybinds(_context.listener);
+        MapKeybinds(_context.Listener);
 
-        _context.listener.RepeatRateMs = 30;
-        _context.listener.StartListening();
+        _context.Listener.RepeatRateMs = 30;
+        _context.Listener.StartListening();
         
-        _context.listener.OnKeyDown += (key, e) => HandleKeyDown(_context.listener, key, e);
-        _context.listener.OnKeyUp += key => HandleKeyUp(_context.listener, key);
+        _context.Listener.OnKeyDown += (key, e) => HandleKeyDown(_context.Listener, key, e);
+        _context.Listener.OnKeyUp += key => HandleKeyUp(_context.Listener, key);
 
         Task.Run(() =>
         {
@@ -154,23 +155,26 @@ class Program
             DrawMenu();
         };
 
+        _context.RedrawMenu();
         _context.ExitEvent.Wait();
     }
 
     private static void DrawMenu()
     {
-        _context.IsDrawing = true;
+        //_context.IsDrawing = true;
         lock (_context.OutLock)
         {
             Console.SetCursorPosition(0, 0);
             Console.WriteLine("\x1b[?7l");
+            Console.SetCursorPosition(0, 0);
+            
             if (_context.Menu.GetItemCount() == 0)
             {
                 Console.Clear();
-                Console.WriteLine($"\x1b[2K{Color.Reset.ToAnsi()} File-Explorer ({Directory.GetCurrentDirectory()})");
+                Console.WriteLine($"\x1b[?7l\x1b[2K{Color.Reset.ToAnsi()} File-Explorer ({Directory.GetCurrentDirectory()})");
                 Console.WriteLine("\x1b[?7h");
                 
-                _context.IsDrawing = false;
+                //_context.IsDrawing = false;
                 return;
             }
         }
@@ -201,7 +205,16 @@ class Program
                     builder.Append("\x1b[2K");
                     builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
                     builder.Append(i == _context.Menu.SelectedIndex ? " > " : "   ");
-                    
+
+                    bool hasFullPath = item.Data.TryGetValue("FullPath", out string? path);
+                    bool hasDefaultColor = item.Data.TryGetValue("DefaultColor", out string? defaultColor);
+                    bool hasCutColor = item.Data.TryGetValue("CutColor", out string? cutColor);
+                    if (hasFullPath && hasDefaultColor && hasCutColor)
+                    {
+                        string ansiColor = _context.MoveItems.Contains(path) && _context.MoveStyle == MoveStyle.Cut ? cutColor : defaultColor;
+                        item.ForegroundColor = Color.FromRgbString(ansiColor);
+                    }
+
                     if (_context.SelectedItems.Contains(item))
                     {
                         builder.Append(item.Prefix);
@@ -250,7 +263,7 @@ class Program
         lock (_context.OutLock)
         {
             Console.SetCursorPosition(0, 0);
-            Console.WriteLine($"\x1b[2K{Color.Reset.ToAnsi()} File-Explorer ({Directory.GetCurrentDirectory()})");
+            Console.WriteLine($"\x1b[?7l\x1b[2K{Color.Reset.ToAnsi()} File-Explorer ({Directory.GetCurrentDirectory()})");
             Console.WriteLine(builder);
             
             (int left, int top) = Console.GetCursorPosition();
@@ -274,7 +287,7 @@ class Program
             }
         }
         
-        _context.IsDrawing = false;
+        //_context.IsDrawing = false;
     }
     
     private static string StripAnsi(string input)
@@ -307,6 +320,7 @@ class Program
         _keybinds.Add(new SelectKeybind(_context) { Keys = [Key.Space] });
         _keybinds.Add(new MultiSelectKeybind(_context) { Keys = [Key.LeftShift, Key.Space] });
         _keybinds.Add(new SelectAllKeybind(_context) { Keys = [Key.LeftCtrl, Key.A] });
+        _keybinds.Add(new DeselectAllKeybind(_context) { Keys = [Key.LeftShift, Key.A] });
         
         _keybinds.Add(new CmdKeybind(_context) { Keys = [Key.LeftCtrl, Key.D] });
         _keybinds.Add(new NemoKeybind(_context) { Keys = [Key.LeftCtrl, Key.O] });
@@ -340,7 +354,7 @@ class Program
         _keybinds.Add(new DeletePermKeybind(_context) { Keys = [Key.LeftShift, Key.Delete] });
 
         _keybinds.Add(new SizeKeybind(_context) {Keys = [Key.LeftCtrl, Key.J] });
-        _keybinds.Add(new SavePathKeybind(_context) {Keys = [Key.LeftShift, Key.C]});
+        _keybinds.Add(new CopyPathKeybind(_context) {Keys = [Key.LeftShift, Key.C]});
         
         _keybinds.Add(new HelpKeybind(_context, listener, _helpStr) { Keys = [Key.F1] });
         _keybinds.Add(new RenameKeybind(_context) { Keys = [Key.F2] });

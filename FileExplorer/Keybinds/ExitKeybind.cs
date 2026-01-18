@@ -6,8 +6,6 @@ public class ExitKeybind(MenuContext context, InputListener listener) : Keybind(
 {
     public override void OnKeyUp()
     {
-        _context.RefreshCancelSource.Cancel();
-        
         lock (_context.OutLock)
         {
             Console.CursorVisible = true;
@@ -17,7 +15,7 @@ public class ExitKeybind(MenuContext context, InputListener listener) : Keybind(
             listener.StopListening();
             listener.WaitForClose();
             
-            Environment.Exit(0);
+            context.ExitEvent.Set();
         }
     }
 }

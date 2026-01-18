@@ -20,12 +20,13 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
                     do
                     {
                         Console.Write($"\x1b[2K\r{Color.Reset.ToAnsi()} Are you sure you want to permanently delete {_context.SelectedItems.Count} items? [Y/n]: ");
-                        input = _context.ReadLine()?.Trim();
+                        input = _context.ReadLine(escapeNo: true)?.Trim();
                     
                         if (input == "n")
                         {
                             Console.CursorVisible = false;
                             Console.Clear();
+                            _context.RedrawMenu();
                         
                             return;
                         }
@@ -54,12 +55,13 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
                     do
                     {
                         Console.Write($"\x1b[2K\r{Color.Reset.ToAnsi()} Are you sure you want to permanently delete '{item.Text}'? [Y/n]: ");
-                        input = _context.ReadLine()?.Trim();
+                        input = _context.ReadLine(escapeNo: true)?.Trim();
                     
                         if (input == "n")
                         {
                             Console.CursorVisible = false;
                             Console.Clear();
+                            _context.RedrawMenu();
                         
                             return;
                         }
@@ -91,10 +93,7 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
             Console.CursorVisible = false;
             Console.Clear();
             
-            Task.Run(() =>
-            {
-                _context.RefreshItems();
-            });
+            _context.RefreshItems();
         }
     }
 }

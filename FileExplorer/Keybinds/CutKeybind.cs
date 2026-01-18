@@ -27,9 +27,7 @@ public class CutKeybind(MenuContext context) : Keybind(context)
             _context.MoveStyle = MoveStyle.Cut;
         }
 
-        Task.Run(() =>
-        {
-            _context.RefreshItems();
-        });
+        //_context.RedrawMenu();
+        _context.RefreshItems();
     }
 }

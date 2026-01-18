@@ -18,5 +18,7 @@ public class SelectAllKeybind(MenuContext context) : Keybind(context)
                 _context.SelectedItems.Add(item);
             }
         }
+        
+        _context.RedrawMenu();
     }
 }

@@ -1,8 +1,12 @@
 ﻿using System.Diagnostics;
+using System.Reflection.Metadata.Ecma335;
+using System.Security.Principal;
 using System.Text;
+using System.Text.RegularExpressions;
 using CmdMenu;
 using FileExplorer.Keybinds;
 using InputLib;
+using InputLib.EventArgs;
 
 namespace FileExplorer;
 
@@ -22,6 +26,7 @@ class Program
           Controls:
            Navigation:
            | Up- / Down Arrow - Navigate items
+           | Shift + Up / Down Arrow - Navigate items quickly
            | (WIP) Left- / Right Arrow - Navigate between menus
            | Enter - Open selected directory / file
            | Escape / Alt + Up Arrow - Go up one directory
@@ -51,7 +56,9 @@ class Program
            | F5 | Ctrl + R - Reload menu
            | Ctrl + F - Search in current directory
            | Ctrl + H - Toggle visibility of hidden files / directories
+           | Ctrl + J - Toggle visibility of file sizes
            | Ctrl + O - Open current directory in file explorer
+           | Shift + C - Copy current directory path to clipboard
            | F1 - Show this menu
            | F10 - Close file explorer (Also see Ctrl + D)
  
@@ -59,6 +66,12 @@ class Program
     
     private static MenuContext _context = new();
     private static List<Keybind> _keybinds = new();
+
+    private static string[] _fileSizes = ["B", "KiB", "MiB", "GiB"];
+    private static readonly Regex AnsiRegex =
+        new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])",
+            RegexOptions.Compiled);
+
     
     public static void Main(string[] args)
     {
@@ -83,19 +96,16 @@ class Program
             }
         }
 
-        Thread.Sleep(100);
         InputListener.Init();
+        Task.Delay(100).Wait();
 
+        Console.OutputEncoding = Encoding.UTF8;
         Console.TreatControlCAsInput = true;
         Console.CursorVisible = false;
         Console.Clear();
 
         _context.Menu = new();
-        
-        Task.Run(() =>
-        {
-            _context.RefreshItems();
-        });
+        _context.RefreshItems();
         
         InputListener.DisableEcho();
         _context.listener = InputListener.New();
@@ -110,68 +120,144 @@ class Program
         _context.listener.RepeatRateMs = 30;
         _context.listener.StartListening();
         
-        _context.listener.OnKeyDown += (key, continuous) => HandleKeyDown(_context.listener, key, continuous);
+        _context.listener.OnKeyDown += (key, e) => HandleKeyDown(_context.listener, key, e);
         _context.listener.OnKeyUp += key => HandleKeyUp(_context.listener, key);
-        
-        while (true)
+
+        Task.Run(() =>
         {
+            int consoleWidth = Console.WindowWidth;
+            int consoleHeight = Console.WindowHeight;
+            while (!_context.ExitEvent.IsSet)
+            {
+                if (consoleWidth != Console.WindowWidth || consoleHeight != Console.WindowHeight)
+                {
+                    consoleWidth = Console.WindowWidth;
+                    consoleHeight = Console.WindowHeight;
+
+                    OnResize();
+                }
+            }
+        });
+        
+        _context.Menu.MenuUpdate += () =>
+        {
+            if (_context.IsDrawing)
+            {
+                return;
+            }
+            
             if (_context.CommandLine != null)
             {
-                Thread.Sleep(50);
-                continue;
+                return;
             }
-
+            
             DrawMenu();
-        }
+        };
+
+        _context.ExitEvent.Wait();
     }
 
     private static void DrawMenu()
     {
+        _context.IsDrawing = true;
+        lock (_context.OutLock)
+        {
+            Console.SetCursorPosition(0, 0);
+            Console.WriteLine("\x1b[?7l");
+            if (_context.Menu.GetItemCount() == 0)
+            {
+                Console.Clear();
+                Console.WriteLine($"\x1b[2K{Color.Reset.ToAnsi()} File-Explorer ({Directory.GetCurrentDirectory()})");
+                Console.WriteLine("\x1b[?7h");
+                
+                _context.IsDrawing = false;
+                return;
+            }
+        }
+        
         int consoleWidth = Console.WindowWidth;
         int consoleHeight = Console.WindowHeight;
+
+        int longestLine;
+        try
+        {
+            longestLine = _context.Menu
+                                  .GetItems()
+                                  .Where(item => item.Data.TryGetValue("ItemType", out string? type) && type == "File")
+                                  .Max(item => StripAnsi(item.Prefix).Length + StripAnsi(item.Text).Length + StripAnsi(item.Suffix).Length);
+        }
+        catch (InvalidOperationException)
+        {
+            longestLine = -1;
+        }
         
         StringBuilder builder = new();
-        _context.Menu.GetViewItems().ForEach(item =>
+        _context.Menu
+                .GetViewItems()
+                .ForEach(item =>
+                {
+                    int i = _context.Menu.IndexOf(item);
+                    
+                    builder.Append("\x1b[2K");
+                    builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
+                    builder.Append(i == _context.Menu.SelectedIndex ? " > " : "   ");
+                    
+                    if (_context.SelectedItems.Contains(item))
+                    {
+                        builder.Append(item.Prefix);
+                        builder.Append(Color.White.ToAnsi(Color.AnsiType.Background));
+                        builder.Append(Color.Black.ToAnsi());
+                        builder.Append(item.Text);
+                        builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
+                        builder.Append(item.Suffix);
+                    }
+                    else
+                    {
+                        builder.Append(_context.Menu.GetItemAt(i));
+                    }
+
+                    if (_context.ShowFileSizes && longestLine != -1 && item.Data.TryGetValue("InfoSize", out string? size))
+                    {
+                        if (long.TryParse(size, out long sizeLong))
+                        {
+                            double sizeCalc = sizeLong;
+                            int sizeType = 0;
+                            while (sizeCalc >= 1024 && sizeType < _fileSizes.Length)
+                            {
+                                sizeCalc /= 1024f;
+                                sizeType++;
+                            }
+                            
+                            int sizePos = longestLine - StripAnsi(item.Text).Length - StripAnsi(item.Suffix).Length + 5;
+                            builder.Append(i == _context.Menu.SelectedIndex ? Color.White.ToAnsi() : Color.LightGray.ToAnsi());
+                            builder.Append(new string(' ', sizePos) + $"{sizeCalc.ToString("F1")} {_fileSizes[sizeType]}");
+                        }
+                    }
+                    
+                    builder.AppendLine();
+                });
+        
+        _context.Menu.ViewRange = Math.Max(consoleHeight - 6, 0);
+        if (_context.Menu.ViewIndex + _context.Menu.ViewRange < _context.Menu.GetItemCount())
         {
-            int i = _context.Menu.IndexOf(item);
-            
-            builder.Append("\x1b[2K");
-            builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
-            builder.Append(i == _context.Menu.SelectedIndex ? " > " : "   ");
-            
-            if (_context.SelectedItems.Contains(item))
-            {
-                builder.Append(item.Prefix);
-                builder.Append(Color.White.ToAnsi(Color.AnsiType.Background));
-                builder.Append(Color.Black.ToAnsi());
-                builder.Append(item.Text);
-                builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
-                builder.Append(item.Suffix);
-            }
-            else
-            {
-                builder.Append(_context.Menu.GetItemAt(i));
-            }
-            
-            builder.AppendLine();
-        });
+            builder.AppendLine($"\x1b[2K\n\x1b[2K{Color.Reset.ToAnsi()}   --MORE--");
+        }
+        else
+        {
+            builder.Append("\x1b[2K\n\x1b[2K");
+        }
         
         lock (_context.OutLock)
         {
             Console.SetCursorPosition(0, 0);
             Console.WriteLine($"\x1b[2K{Color.Reset.ToAnsi()} File-Explorer ({Directory.GetCurrentDirectory()})");
-        
-            _context.Menu.ViewRange = consoleHeight - 6;
-            if (_context.Menu.ViewIndex + _context.Menu.ViewRange < _context.Menu.GetItemCount())
-            {
-                builder.AppendLine($"\x1b[2K\n\x1b[2K{Color.Reset.ToAnsi()}   --MORE--");
-            }
-            else
-            {
-                builder.Append("\x1b[2K\n\x1b[2K");
-            }
-            
             Console.WriteLine(builder);
+            
+            (int left, int top) = Console.GetCursorPosition();
+            Console.SetCursorPosition(0, 0);
+            Console.WriteLine("\x1b[?7h");
+            
+            Console.SetCursorPosition(left, top);
         }
         
         Thread.Sleep(10);
@@ -187,6 +273,24 @@ class Program
                 Console.Clear();
             }
         }
+        
+        _context.IsDrawing = false;
+    }
+    
+    private static string StripAnsi(string input)
+    {
+        return AnsiRegex.Replace(input, "");
+    }
+
+
+    private static void OnResize()
+    {
+        lock (_context.OutLock)
+        {
+            Console.Clear();
+        }
+        
+        DrawMenu();
     }
     
     private static void MapKeybinds(InputListener listener)
@@ -198,6 +302,7 @@ class Program
         
         _keybinds.Add(new ClickKeybind(_context) { Keys = [Key.Enter] });
         _keybinds.Add(new ReturnKeybind(_context) { Keys = [Key.Escape] });
+        _keybinds.Add(new ReturnKeybind(_context) { Keys = [Key.Alt, Key.ArrowUp] });
         
         _keybinds.Add(new SelectKeybind(_context) { Keys = [Key.Space] });
         _keybinds.Add(new MultiSelectKeybind(_context) { Keys = [Key.LeftShift, Key.Space] });
@@ -218,7 +323,7 @@ class Program
         _keybinds.Add(new ReloadKeybind(_context) { Keys = [Key.LeftCtrl, Key.R] });
         _keybinds.Add(new ReloadKeybind(_context) { Keys = [Key.F5] });
         
-        _keybinds.Add(new ReloadKeybind(_context) { Keys = [Key.LeftCtrl, Key.H] });
+        _keybinds.Add(new HideKeybind(_context) { Keys = [Key.LeftCtrl, Key.H] });
         _keybinds.Add(new SearchKeybind(_context) { Keys = [Key.LeftCtrl, Key.F] });
         
         _keybinds.Add(new NewFolderKeybind(_context) { Keys = [Key.LeftShift, Key.N] });
@@ -233,22 +338,28 @@ class Program
         
         _keybinds.Add(new DeleteKeybind(_context) { Keys = [Key.Delete] });
         _keybinds.Add(new DeletePermKeybind(_context) { Keys = [Key.LeftShift, Key.Delete] });
+
+        _keybinds.Add(new SizeKeybind(_context) {Keys = [Key.LeftCtrl, Key.J] });
+        _keybinds.Add(new SavePathKeybind(_context) {Keys = [Key.LeftShift, Key.C]});
         
         _keybinds.Add(new HelpKeybind(_context, listener, _helpStr) { Keys = [Key.F1] });
         _keybinds.Add(new RenameKeybind(_context) { Keys = [Key.F2] });
         _keybinds.Add(new ExitKeybind(_context, listener) { Keys = [Key.F10] });
     }
 
-    private static void HandleKeyDown(InputListener listener, Key key, bool continuous)
+    private static void HandleKeyDown(InputListener listener, Key key, KeyDownEventArgs e)
     {
         List<Key> heldKeys = listener.GetHeldKeys().ToList();
-        foreach (Keybind keybind in _keybinds)
+
+        Keybind? bestMatch =
+            _keybinds
+                .Where(kb => kb.Keys.All(k => heldKeys.Contains(k)))
+                .OrderByDescending(kb => kb.Keys.Count)
+                .FirstOrDefault();
+
+        if (bestMatch != null)
         {
-            if (keybind.Keys.All(k => heldKeys.Contains(k)))
-            {
-                keybind.OnKeyDown(continuous);
-                return;
-            }
+            bestMatch.OnKeyDown(e);
         }
     }
 
@@ -256,14 +367,16 @@ class Program
     {
         List<Key> heldKeys = listener.GetHeldKeys().ToList();
         heldKeys.Add(key);
-        
-        foreach (Keybind keybind in _keybinds)
+
+        Keybind? bestMatch =
+            _keybinds
+                .Where(kb => kb.Keys.All(k => heldKeys.Contains(k)))
+                .OrderByDescending(kb => kb.Keys.Count)
+                .FirstOrDefault();
+
+        if (bestMatch != null)
         {
-            if (keybind.Keys.All(k => heldKeys.Contains(k)))
-            {
-                keybind.OnKeyUp();
-                return;
-            }
+            bestMatch.OnKeyUp();
         }
     }
 }

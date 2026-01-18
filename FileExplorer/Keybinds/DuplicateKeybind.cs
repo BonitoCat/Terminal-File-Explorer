@@ -1,10 +1,11 @@
 using CmdMenu;
+using InputLib.EventArgs;
 
 namespace FileExplorer.Keybinds;
 
 public class DuplicateKeybind(MenuContext context) : Keybind(context)
 {
-    public override void OnKeyDown(bool continuous)
+    public override void OnKeyDown(KeyDownEventArgs e)
     {
         lock (_context.Menu.Lock)
         {
@@ -53,12 +54,8 @@ public class DuplicateKeybind(MenuContext context) : Keybind(context)
                     File.Copy(itemPath, newName);
                 }
             }
-                
-            Console.Clear();
-            Task.Run(() =>
-            {
-                _context.RefreshItems();
-            });
+            
+            _context.RefreshItems();
         }
     }
 }

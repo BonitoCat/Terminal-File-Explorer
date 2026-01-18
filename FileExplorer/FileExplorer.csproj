@@ -10,10 +10,13 @@
     <ItemGroup>
       <ProjectReference Include="..\..\CmdMenu\CmdMenu\CmdMenu.csproj" />
       <ProjectReference Include="..\..\InputLib\InputLib\InputLib.csproj" />
-      <ProjectReference Include="..\..\MetadataGenerator\MetadataGenerator\MetadataGenerator.csproj"
-                        OutputItemType="Analyzer"
-                        ReferenceOutputAssembly="false" />
-      <AdditionalFiles Include="deb-linux-x64/DEBIAN/control" />
+      <ProjectReference Include="..\..\MetadataGenerator\MetadataGenerator\MetadataGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+      <AdditionalFiles Include="builds/deb-linux-x64/DEBIAN/control" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.2" />
+      <PackageReference Include="Tmds.DBus" Version="0.23.0" />
     </ItemGroup>
 
 

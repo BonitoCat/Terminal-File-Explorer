@@ -1,8 +1,10 @@
+using InputLib.EventArgs;
+
 namespace FileExplorer.Keybinds;
 
 public class DirHistoryKeybind(MenuContext context) : Keybind(context)
 {
-    public override void OnKeyDown(bool continuous)
+    public override void OnKeyDown(KeyDownEventArgs e)
     {
         if (_context.DirHistory.Count > 0)
         {

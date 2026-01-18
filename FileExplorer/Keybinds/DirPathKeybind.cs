@@ -33,11 +33,9 @@ public class DirPathKeybind(MenuContext context) : Keybind(context)
 
             Console.CursorVisible = false;
             Console.Clear();
-                        
-            Task.Run(() =>
-            {
-                _context.RefreshItems();
-            });
+            
+            _context.RefreshItems();
+            _context.RedrawMenu();
         }
     }
 }

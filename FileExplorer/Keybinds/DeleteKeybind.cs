@@ -20,12 +20,13 @@ public class DeleteKeybind(MenuContext context) : Keybind(context)
                     do
                     {
                         Console.Write($"\x1b[2K\r{Color.Reset.ToAnsi()} Are you sure you want to move {_context.SelectedItems.Count} items to the recycle bin? [Y/n]: ");
-                        input = _context.ReadLine()?.Trim().ToLower();
+                        input = _context.ReadLine(escapeNo: true)?.Trim().ToLower();
                     
                         if (input == "n")
                         {
                             Console.CursorVisible = false;
                             Console.Clear();
+                            _context.RedrawMenu();
                         
                             return;
                         }
@@ -53,12 +54,13 @@ public class DeleteKeybind(MenuContext context) : Keybind(context)
                     do
                     {
                         Console.Write($"\x1b[2K\r{Color.Reset.ToAnsi()} Are you sure you want to move '{item.Text}' to the recycle bin? [Y/n]: ");
-                        input = _context.ReadLine()?.Trim().ToLower();
+                        input = _context.ReadLine(escapeNo: true)?.Trim().ToLower();
                         
                         if (input == "n")
                         {
                             Console.CursorVisible = false;
                             Console.Clear();
+                            _context.RedrawMenu();
                         
                             return;
                         }
@@ -99,10 +101,7 @@ public class DeleteKeybind(MenuContext context) : Keybind(context)
             Console.CursorVisible = false;
             Console.Clear();
             
-            Task.Run(() =>
-            {
-                _context.RefreshItems();
-            });
+            _context.RefreshItems();
         }
     }
 }

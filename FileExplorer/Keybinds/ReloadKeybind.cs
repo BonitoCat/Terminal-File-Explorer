@@ -1,13 +1,12 @@
+using InputLib.EventArgs;
+
 namespace FileExplorer.Keybinds;
 
 public class ReloadKeybind(MenuContext context) : Keybind(context)
 {
-    public override void OnKeyDown(bool continuous)
+    public override void OnKeyDown(KeyDownEventArgs e)
     {
-        Task.Run(() =>
-        {
-            Console.Clear();
-            _context.RefreshItems();
-        });
+        Console.Clear();
+        _context.RefreshItems();
     }
 }

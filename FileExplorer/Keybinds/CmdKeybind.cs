@@ -17,9 +17,8 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
         _context.listener?.WaitForClose();
         
         Thread.Sleep(100);
-        
         Console.CursorVisible = true;
-        
+
         string shell = Environment.GetEnvironmentVariable("SHELL") ?? "/bin/bash";
         _context.CommandLine = new()
         {
@@ -43,15 +42,16 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
         _context.CommandLine = null;
         
         Console.CursorVisible = false;
-        Console.Clear();
-        Task.Run(() =>
+        lock (_context.OutLock)
         {
-            _context.RefreshItems();
-        });
+            Console.Clear();
+        }
+        
+        _context.RefreshItems();
         
         InputListener.DisableEcho();
-        
         Thread.Sleep(100);
+        
         _context.listener?.StartListening();
     }
 }

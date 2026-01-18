@@ -1,4 +1,5 @@
 using InputLib;
+using InputLib.EventArgs;
 
 namespace FileExplorer;
 
@@ -18,7 +19,7 @@ public abstract class Keybind
         _context = context;
     }
 
-    public virtual void OnKeyDown(bool continuous) { }
+    public virtual void OnKeyDown(KeyDownEventArgs e) { }
 
     public virtual void OnKeyUp() { }
 }

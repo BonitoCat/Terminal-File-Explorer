@@ -1,8 +1,10 @@
+using InputLib.EventArgs;
+
 namespace FileExplorer.Keybinds;
 
 public class PasteKeybind(MenuContext context) : Keybind(context)
 {
-    public override void OnKeyDown(bool continuous)
+    public override void OnKeyDown(KeyDownEventArgs e)
     {
         lock (_context.Menu.Lock)
         {
@@ -53,10 +55,7 @@ public class PasteKeybind(MenuContext context) : Keybind(context)
             _context.MoveStyle = MoveStyle.None;
             Console.Clear();
             
-            Task.Run(() =>
-            {
-                _context.RefreshItems();
-            });
+            _context.RefreshItems();
         }
     }
 }

@@ -22,6 +22,7 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
             {
                 Console.CursorVisible = false;
                 Console.Clear();
+                _context.RedrawMenu();
                 
                 return;
             }
@@ -41,13 +42,14 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
                 while (input != null && input != "y" && input != "n")
                 {
                     Console.Write($"\x1b[2K\r{Color.Reset.ToAnsi()} Are you sure? [Y/n]: ");
-                    input = Console.ReadLine()?.Trim().ToLower();
+                    input = _context.ReadLine(escapeNo: true)?.Trim().ToLower();
                 }
 
                 if (input == "n")
                 {
                     Console.CursorVisible = false;
                     Console.Clear();
+                    _context.RedrawMenu();
                 
                     return;
                 }   
@@ -86,5 +88,7 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
             Console.CursorVisible = false;
             Console.Clear();
         }
+        
+        _context.RedrawMenu();
     }
 }

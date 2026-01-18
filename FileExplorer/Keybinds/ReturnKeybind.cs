@@ -1,10 +1,11 @@
 using CmdMenu;
+using InputLib.EventArgs;
 
 namespace FileExplorer.Keybinds;
 
 public class ReturnKeybind(MenuContext context) : Keybind(context)
 {
-    public override void OnKeyDown(bool continuous)
+    public override void OnKeyDown(KeyDownEventArgs e)
     {
         if (_context.SearchString != null || _context.SelectedItems.Count > 0)
         {
@@ -13,10 +14,7 @@ public class ReturnKeybind(MenuContext context) : Keybind(context)
                 _context.SearchString = null;
                         
                 Console.Clear();
-                Task.Run(() =>
-                {
-                    _context.RefreshItems();
-                });
+                _context.RefreshItems();
             }
             if (_context.SelectedItems.Count > 0)
             {
@@ -33,5 +31,7 @@ public class ReturnKeybind(MenuContext context) : Keybind(context)
             _context.Menu.SelectedIndex = 0;
             _context.OnClickDir(new MenuItem(".."));
         }
+        
+        _context.RedrawMenu();
     }
 }

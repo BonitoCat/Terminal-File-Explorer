@@ -19,21 +19,25 @@ public class SearchKeybind(MenuContext context) : Keybind(context)
                 if (search == null)
                 {
                     Console.Clear();
+                    _context.RedrawMenu();
+                    
                     return;
                 }
             }
-            
-            _context.SearchString = search;
-            Task.Run(() =>
+
+            if (search != _context.SearchString)
             {
+                _context.SearchString = search;
+            
+                lock (_context.OutLock)
+                {
+                    Console.Clear();
+                }
+            
+                _context.RefreshItems();
                 _context.Menu.ViewIndex = 0;
                 _context.Menu.SelectedIndex = 0;
-                
-                Console.Clear();
-                _context.Menu.ClearItems();
-                
-                _context.RefreshItems();
-            });
+            }
         }
     }
 }

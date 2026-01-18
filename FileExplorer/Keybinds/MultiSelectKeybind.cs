@@ -45,5 +45,7 @@ public class MultiSelectKeybind(MenuContext context) : Keybind(context)
                 }
             }
         }
+        
+        _context.RedrawMenu();
     }
 }

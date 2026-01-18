@@ -1,13 +1,14 @@
 using CmdMenu;
+using InputLib.EventArgs;
 
 namespace FileExplorer.Keybinds;
 
 public class ClickKeybind(MenuContext context) : Keybind(context)
 {
-    public override void OnKeyDown(bool continuous)
+    public override void OnKeyDown(KeyDownEventArgs e)
     {
         string text = _context.Menu.SelectedItem?.Text ?? "..";
-        if (text != ".." && continuous)
+        if (text != ".." && e.Continuous)
         {
             return;
         }
@@ -19,7 +20,7 @@ public class ClickKeybind(MenuContext context) : Keybind(context)
             _context.Menu.OnItemAdded += OnItemAdded;
             Task.Run(() =>
             {
-                Task.Delay(TimeSpan.FromMilliseconds(100)).Wait();
+                Task.Delay(100).Wait();
                 _context.Menu.OnItemAdded -= OnItemAdded;
             });
         }

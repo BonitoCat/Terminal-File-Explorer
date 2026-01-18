@@ -19,6 +19,7 @@ public class NewFileKeybind(MenuContext context) : Keybind(context)
                 if (text == null)
                 {
                     Console.Clear();
+                    _context.RedrawMenu();
                     return;
                 }   
             }
@@ -33,11 +34,7 @@ public class NewFileKeybind(MenuContext context) : Keybind(context)
             }
                 
             Console.Clear();
-            Task.Run(() =>
-            {
-                _context.RefreshItems();
-                _context.Menu.SelectedIndex = _context.Menu.IndexOf(_context.Menu.GetItemByText(text));
-            });
+            _context.RefreshItems();
         }
     }
 }

@@ -98,7 +98,6 @@ class Program
         }
 
         InputListener.Init();
-        Task.Delay(100).Wait();
 
         Console.OutputEncoding = Encoding.UTF8;
         Console.TreatControlCAsInput = true;
@@ -110,11 +109,16 @@ class Program
         
         InputListener.DisableEcho();
         _context.Listener = InputListener.New();
+        
         if (_context.Listener == null)
         {
             Console.WriteLine("Could not load input listener");
             return;
         }
+        
+        _context.Listener.ClearKeyState();
+        _context.Listener.ConsumeNextKeyDown(Key.Enter);
+        _context.Listener.ConsumeNextKeyUp(Key.Enter);
         
         MapKeybinds(_context.Listener);
 
@@ -142,20 +146,30 @@ class Program
         
         _context.Menu.MenuUpdate += () =>
         {
-            if (_context.IsDrawing)
+            /*if (_context.IsDrawing)
             {
                 return;
-            }
-            
+            }*/
+
             if (_context.CommandLine != null)
             {
                 return;
             }
-            
+
             DrawMenu();
         };
 
         _context.RedrawMenu();
+        /*while (!_context.ExitEvent.IsSet)
+        {
+            if (_context.RedrawRequested)
+            {
+                DrawMenu();
+                _context.RedrawRequested = false;
+            }
+
+            Thread.Sleep(16);
+        }*/
         _context.ExitEvent.Wait();
     }
 
@@ -165,8 +179,7 @@ class Program
         lock (_context.OutLock)
         {
             Console.SetCursorPosition(0, 0);
-            Console.WriteLine("\x1b[?7l");
-            Console.SetCursorPosition(0, 0);
+            Console.Write("\x1b[?7l");
             
             if (_context.Menu.GetItemCount() == 0)
             {
@@ -196,6 +209,7 @@ class Program
         }
         
         StringBuilder builder = new();
+        builder.AppendLine($"\x1b[?7l\x1b[2K{Color.Reset.ToAnsi()} File-Explorer ({Directory.GetCurrentDirectory()})");
         _context.Menu
                 .GetViewItems()
                 .ForEach(item =>
@@ -259,18 +273,13 @@ class Program
         {
             builder.Append("\x1b[2K\n\x1b[2K");
         }
+
+        builder.Append("\x1b[?7h");
         
         lock (_context.OutLock)
         {
             Console.SetCursorPosition(0, 0);
-            Console.WriteLine($"\x1b[?7l\x1b[2K{Color.Reset.ToAnsi()} File-Explorer ({Directory.GetCurrentDirectory()})");
             Console.WriteLine(builder);
-            
-            (int left, int top) = Console.GetCursorPosition();
-            Console.SetCursorPosition(0, 0);
-            Console.WriteLine("\x1b[?7h");
-            
-            Console.SetCursorPosition(left, top);
         }
         
         Thread.Sleep(10);
@@ -303,7 +312,7 @@ class Program
             Console.Clear();
         }
         
-        DrawMenu();
+        _context.RedrawMenu();
     }
     
     private static void MapKeybinds(InputListener listener)

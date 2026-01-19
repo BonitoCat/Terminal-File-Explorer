@@ -11,7 +11,7 @@
       <ProjectReference Include="..\..\CmdMenu\CmdMenu\CmdMenu.csproj" />
       <ProjectReference Include="..\..\InputLib\InputLib\InputLib.csproj" />
       <ProjectReference Include="..\..\MetadataGenerator\MetadataGenerator\MetadataGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-      <AdditionalFiles Include="builds/deb-linux-x64/DEBIAN/control" />
+      <AdditionalFiles Include="builds/fe-linux-x64/DEBIAN/control" />
     </ItemGroup>
 
     <ItemGroup>

@@ -12,11 +12,8 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
     
     private void OpenCommandLine()
     {
+        _context.Listener.PauseListening = true;
         InputListener.EnableEcho();
-        _context.Listener?.StopListening();
-        _context.Listener?.WaitForClose();
-        
-        Thread.Sleep(100);
         Console.CursorVisible = true;
 
         string shell = Environment.GetEnvironmentVariable("SHELL") ?? "/bin/bash";
@@ -26,18 +23,14 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
             {
                 FileName = shell,
                 WorkingDirectory = Directory.GetCurrentDirectory(),
-                UseShellExecute = false,
+                UseShellExecute = true,
                 RedirectStandardInput = false,
                 RedirectStandardOutput = false,
                 RedirectStandardError = false,
-            }
+            },
         };
         
-        lock (_context.Menu.Lock)
-        {
-            _context.CommandLine.Start();
-        }
-        
+        _context.CommandLine.Start();
         _context.CommandLine.WaitForExit();
         _context.CommandLine = null;
         
@@ -48,10 +41,12 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
         }
         
         _context.RefreshItems();
-        
-        InputListener.DisableEcho();
+
         Thread.Sleep(100);
         
-        _context.Listener?.StartListening();
+        InputListener.DisableEcho();
+        _context.Listener.PauseListening = false;
+
+        _context.Listener.ConsumeNextKeyUp(Key.LeftCtrl);
     }
 }

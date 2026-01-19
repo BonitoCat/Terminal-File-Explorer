@@ -28,16 +28,17 @@ public class SearchKeybind(MenuContext context) : Keybind(context)
             if (search != _context.SearchString)
             {
                 _context.SearchString = search;
-            
-                lock (_context.OutLock)
-                {
-                    Console.Clear();
-                }
-            
+                
                 _context.RefreshItems();
                 _context.Menu.ViewIndex = 0;
                 _context.Menu.SelectedIndex = 0;
             }
+            
+            lock (_context.OutLock)
+            {
+                Console.Clear();
+            }
+            _context.RedrawMenu();
         }
     }
 }

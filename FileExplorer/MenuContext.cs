@@ -51,8 +51,8 @@ public class MenuContext
     public MoveStyle? MoveStyle { get; set; } = FileExplorer.MoveStyle.None;
     public CancellationTokenSource RefreshCancelSource { get; set; } = new();
     public object OutLock { get; } = new();
-    public bool IsDrawing { get; set; }
-    //public UiDispatcher UiDispatcher = new();
+    //public bool IsDrawing { get; set; }
+    public bool RedrawRequested { get; set; }
     public readonly ManualResetEventSlim ExitEvent = new();
 
     private int _foldersLoaded;
@@ -345,6 +345,8 @@ public class MenuContext
         {
             Menu.MenuUpdate.Invoke();
         });
+        
+        //RedrawRequested = true;
     }
     
     public void OnClickDir(MenuItem sender, bool saveToHistory = true)
@@ -433,7 +435,7 @@ public class MenuContext
 
     public void OnClickFile(MenuItem sender)
     {
-        Listener?.StopListening();
+        Listener.RaiseEvents = false;
         
         int lines = Console.WindowHeight;
         int columns = Console.WindowWidth;
@@ -446,7 +448,7 @@ public class MenuContext
                 FileName = "nano",
                 Arguments = sender.Text,
                 UseShellExecute = false,
-            }
+            },
         };
 
         lock (Menu.Lock)
@@ -459,8 +461,8 @@ public class MenuContext
             Console.WriteLine($"\x1b[8;{lines};{columns}t");
             RedrawMenu();
         }
-        
-        Listener?.StartListening();
+
+        Listener.RaiseEvents = true;
     }
 
     public void OnClickImage(MenuItem sender)
@@ -641,7 +643,7 @@ public class MenuContext
 
     public string? ReadLine(bool enterNull = false, bool escapeNo = false)
     {
-        Listener?.StopListening();
+        Listener.RaiseEvents = false;
         Thread.Sleep(100);
 
         InputListener? keyListener = InputListener.New();
@@ -668,7 +670,7 @@ public class MenuContext
                     result = string.IsNullOrEmpty(builder.ToString()) ? "y" : builder.ToString();
                 }
                 
-                keyListener.StopListening();
+                keyListener.Dispose();
             }
             
             if (key == Key.Backspace)
@@ -695,18 +697,22 @@ public class MenuContext
             if (key == Key.Escape)
             {
                 result = escapeNo ? "n" : null;
-                keyListener.StopListening();
+                keyListener.Dispose();
             }
         }
         
         keyListener.OnKeyDown += OnKeyDown;
         keyListener.OnKeyUp += OnKeyUp;
 
-        keyListener.WaitForClose();
-        Listener?.StartListening();
-        
+        keyListener.WaitForDispose();
         keyListener.OnKeyDown -= OnKeyDown;
         keyListener.OnKeyUp -= OnKeyUp;
+        
+        Listener.RaiseEvents = true;
+        Listener.ClearKeyState();
+        
+        Listener.ConsumeNextKeyDown(Key.Enter);
+        Listener.ConsumeNextKeyUp(Key.Enter);
 
         return result;
     }

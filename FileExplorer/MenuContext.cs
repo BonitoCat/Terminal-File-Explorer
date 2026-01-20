@@ -44,6 +44,7 @@ public class MenuContext
     public bool ShowHiddenFiles { get; set; }
     public bool ShowFileSizes { get; set; }
     public Process? CommandLine { get; set; }
+    public string BookmarkDir { get; set; } = "";
     public string? SearchString { get; set; }
     public Stack<string> DirHistory { get; set; } = new();
     public List<MenuItem> SelectedItems { get; } = new();
@@ -57,7 +58,7 @@ public class MenuContext
 
     private int _foldersLoaded;
     private int _filesLoaded;
-    
+
     public void RefreshItems()
     {
         SelectedItems.Clear();
@@ -357,26 +358,27 @@ public class MenuContext
             Console.Clear();
         }
 
-        if (saveToHistory)
+        string cwd = Directory.GetCurrentDirectory();
+        if (saveToHistory && cwd != BookmarkDir)
         {
-            DirHistory.Push(Path.GetFullPath(Directory.GetCurrentDirectory()));
+            DirHistory.Push(Path.GetFullPath(cwd));
         }
         
         Directory.SetCurrentDirectory(sender.Text);
         FileWatcher?.Dispose();
         ParentWatcher?.Dispose();
         
-        FileWatcher = new(Directory.GetCurrentDirectory());
+        FileWatcher = new(cwd);
         FileWatcher.EnableRaisingEvents = true;
         FileWatcher.NotifyFilter = NotifyFilters.DirectoryName | NotifyFilters.FileName;
 
-        if (Directory.GetParent(Directory.GetCurrentDirectory()) != null)
+        if (Directory.GetParent(cwd) != null)
         {
-            ParentWatcher = new(Directory.GetParent(Directory.GetCurrentDirectory())?.FullName ?? "");
+            ParentWatcher = new(Directory.GetParent(cwd)?.FullName ?? "");
             ParentWatcher.EnableRaisingEvents = true;
             ParentWatcher.NotifyFilter = NotifyFilters.DirectoryName;
             
-            string currentDir = Directory.GetCurrentDirectory();
+            string currentDir = cwd;
             ParentWatcher.Deleted += (obj, e) =>
             {
                 bool currDirExists;

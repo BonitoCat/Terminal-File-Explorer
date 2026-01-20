@@ -8,12 +8,19 @@ public class ClickKeybind(MenuContext context) : Keybind(context)
     public override void OnKeyDown(KeyDownEventArgs e)
     {
         string text = _context.Menu.SelectedItem?.Text ?? "..";
-        if (text != ".." && e.Continuous)
+        if (_context.Menu.SelectedItem?.Data.TryGetValue("DestinationPath", out string? destPath) ?? false)
         {
-            return;
+            _context.OnClickDir(new(destPath));
         }
+        else
+        {
+            if (text != ".." && e.Continuous)
+            {
+                return;
+            }
         
-        _context.Menu.CallSelectedItemClick();
+            _context.Menu.CallSelectedItemClick();
+        }
         
         if (text != "..")
         {

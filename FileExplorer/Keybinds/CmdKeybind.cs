@@ -1,12 +1,18 @@
 using System.Diagnostics;
 using InputLib;
+using InputLib.EventArgs;
 
 namespace FileExplorer.Keybinds;
 
 public class CmdKeybind(MenuContext context) : Keybind(context)
 {
-    public override void OnKeyUp()
+    public override void OnKeyDown(KeyDownEventArgs e)
     {
+        if (e.Continuous)
+        {
+            return;
+        }
+        
         OpenCommandLine();
     }
     
@@ -47,6 +53,6 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
         InputListener.DisableEcho();
         _context.Listener.PauseListening = false;
 
-        _context.Listener.ConsumeNextKeyUp(Key.LeftCtrl);
+        _context.Listener.ConsumeNextKeyDown(Key.D);
     }
 }

@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using CmdMenu;
 using FileExplorer.Keybinds;
+using FileLib;
 using InputLib;
 using InputLib.EventArgs;
 
@@ -31,14 +32,16 @@ class Program
            | Enter - Open selected directory / file
            | Escape / Alt + Up Arrow - Go up one directory
            | Escape - Cancel current action
-           | Ctrl + B / Alt + Left Arrow - Return to previous directory
+           | Alt + Left Arrow - Return to previous directory
            | Ctrl + W - Go to specific directory by path
            | Pos1 | Ctrl + Up Arrow - Go to fist item of menu
            | End | Ctrl + Down Arrow - Go to last item of menu
+           | F4 - Navigate ot bookmarks
            | Ctrl + D - Switch between menu and command line
            
            Editing:
            | F2 - Rename selected item
+           | Shift + F4 - Add / remove current folder in bookmarks
            | Delete - Move item to recycle bin
            | Shift + Delete - Permanently delete item
            | Space - Select item
@@ -68,7 +71,7 @@ class Program
     private static MenuContext _context = new();
     private static List<Keybind> _keybinds = new();
 
-    private static string[] _fileSizes = ["B", "KiB", "MiB", "GiB"];
+    private static string[] _fileSizes = ["B", "kiB", "MiB", "GiB"];
     private static readonly Regex AnsiRegex =
         new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])",
             RegexOptions.Compiled);
@@ -97,6 +100,8 @@ class Program
             }
         }
 
+        _context.BookmarkDir = Path.Combine(DirectoryHelper.GetAppDataDirPath(), "fe", "Bookmarks");
+        DirectoryHelper.CreateDir(_context.BookmarkDir);
         InputListener.Init();
 
         Console.OutputEncoding = Encoding.UTF8;
@@ -209,7 +214,8 @@ class Program
         }
         
         StringBuilder builder = new();
-        builder.AppendLine($"\x1b[?7l\x1b[2K{Color.Reset.ToAnsi()} File-Explorer ({Directory.GetCurrentDirectory()})");
+        string currentDir = Directory.GetCurrentDirectory() == _context.BookmarkDir ? "Bookmarks" : Directory.GetCurrentDirectory();
+        builder.AppendLine($"\x1b[?7l\x1b[2K{Color.Reset.ToAnsi()} File-Explorer ({currentDir})");
         _context.Menu
                 .GetViewItems()
                 .ForEach(item =>
@@ -334,7 +340,6 @@ class Program
         _keybinds.Add(new CmdKeybind(_context) { Keys = [Key.LeftCtrl, Key.D] });
         _keybinds.Add(new NemoKeybind(_context) { Keys = [Key.LeftCtrl, Key.O] });
         
-        _keybinds.Add(new DirHistoryKeybind(_context) { Keys = [Key.LeftCtrl, Key.B] });
         _keybinds.Add(new DirHistoryKeybind(_context) { Keys = [Key.Alt, Key.ArrowLeft] });
         
         _keybinds.Add(new JumpStartKeybind(_context) { Keys = [Key.LeftCtrl, Key.ArrowUp] });
@@ -364,6 +369,9 @@ class Program
 
         _keybinds.Add(new SizeKeybind(_context) {Keys = [Key.LeftCtrl, Key.J] });
         _keybinds.Add(new CopyPathKeybind(_context) {Keys = [Key.LeftShift, Key.C]});
+        
+        _keybinds.Add(new BookmarkMenuKeybind(_context) {Keys = [Key.F4]});
+        _keybinds.Add(new AddBookmarkKeybind(_context) {Keys = [Key.LeftCtrl, Key.B]});
         
         _keybinds.Add(new HelpKeybind(_context, listener, _helpStr) { Keys = [Key.F1] });
         _keybinds.Add(new RenameKeybind(_context) { Keys = [Key.F2] });

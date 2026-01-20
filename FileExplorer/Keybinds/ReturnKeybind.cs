@@ -29,7 +29,7 @@ public class ReturnKeybind(MenuContext context) : Keybind(context)
             }
                         
             _context.Menu.SelectedIndex = 0;
-            _context.OnClickDir(new MenuItem(".."));
+            _context.Menu.CallSelectedItemClick();
         }
         
         _context.RedrawMenu();

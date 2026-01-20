@@ -20,6 +20,7 @@ public class DirPathKeybind(MenuContext context) : Keybind(context)
                 {
                     Console.CursorVisible = false;
                     Console.Clear();
+                    _context.RedrawMenu();
 
                     return;
                 }   
@@ -35,7 +36,6 @@ public class DirPathKeybind(MenuContext context) : Keybind(context)
             Console.Clear();
             
             _context.RefreshItems();
-            _context.RedrawMenu();
         }
     }
 }

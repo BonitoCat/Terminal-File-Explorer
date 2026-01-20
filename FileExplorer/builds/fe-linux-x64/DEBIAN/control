@@ -1,6 +1,7 @@
 Package: fe-linux-x64
-Version: 1.1.4
+Version: 1.1.5
 Section: utils
 Architecture: amd64
 Maintainer: BonitoCat
 Description: An advanced file explorer for the terminal
+Depends: wl-clipboard, xclip

@@ -1,6 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Reflection.Metadata.Ecma335;
-using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
 using CmdMenu;
@@ -28,14 +26,15 @@ class Program
            Navigation:
            | Up- / Down Arrow - Navigate items
            | Shift + Up / Down Arrow - Navigate items quickly
-           | (WIP) Left- / Right Arrow - Navigate between menus
-           | Enter - Open selected directory / file
-           | Escape / Alt + Up Arrow - Go up one directory
+           | (WIP) Ctrl + Left- / -Right Arrow - Navigate between menus
+           | Enter / Arrow Right - Open selected directory / file
+           | Ctrl + Enter / -Arrow Right - Open selected file in nano
+           | Escape / Alt + Up- / Left Arrow - Go up one directory
            | Escape - Cancel current action
            | Alt + Left Arrow - Return to previous directory
            | Ctrl + W - Go to specific directory by path
-           | Pos1 | Ctrl + Up Arrow - Go to fist item of menu
-           | End | Ctrl + Down Arrow - Go to last item of menu
+           | Pos1 / Ctrl + Up Arrow - Go to fist item of menu
+           | End / Ctrl + Down Arrow - Go to last item of menu
            | F4 - Navigate ot bookmarks
            | Ctrl + D - Switch between menu and command line
            
@@ -67,15 +66,14 @@ class Program
            | F10 - Close file explorer (Also see Ctrl + D)
  
          """;
+
+    private static MenuContext _context = new()
+    {
+        Menu = new(),
+    };
     
-    private static MenuContext _context = new();
     private static List<Keybind> _keybinds = new();
-
     private static string[] _fileSizes = ["B", "kiB", "MiB", "GiB"];
-    private static readonly Regex AnsiRegex =
-        new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])",
-            RegexOptions.Compiled);
-
     
     public static void Main(string[] args)
     {
@@ -95,7 +93,21 @@ class Program
                 
                 case "--open":
                 case "-o":
-                    Process.Start("nemo", Directory.GetCurrentDirectory());
+                    if (OperatingSystem.IsLinux())
+                    {
+                        Process proc = new()
+                        {
+                            StartInfo = new()
+                            {
+                                FileName = "nemo",
+                                Arguments = $"\"{Directory.GetCurrentDirectory()}\"",
+                                UseShellExecute = false,
+                            },
+                        };
+
+                        proc.Start();
+                    }
+                    
                     return;
             }
         }
@@ -109,7 +121,6 @@ class Program
         Console.CursorVisible = false;
         Console.Clear();
 
-        _context.Menu = new();
         _context.OnClickDir(new(Directory.GetCurrentDirectory()), false);
         
         InputListener.DisableEcho();
@@ -173,7 +184,7 @@ class Program
                 _context.RedrawRequested = false;
             }
 
-            Thread.Sleep(16);
+            Thread.Sleep(1);
         }*/
         _context.ExitEvent.Wait();
     }
@@ -206,7 +217,7 @@ class Program
             longestLine = _context.Menu
                                   .GetItems()
                                   .Where(item => item.Data.TryGetValue("ItemType", out string? type) && type == "File")
-                                  .Max(item => StripAnsi(item.Prefix).Length + StripAnsi(item.Text).Length + StripAnsi(item.Suffix).Length);
+                                  .Max(item => _context.StripAnsi(item.Prefix).Length + _context.StripAnsi(item.Text).Length + _context.StripAnsi(item.Suffix).Length);
         }
         catch (InvalidOperationException)
         {
@@ -261,7 +272,7 @@ class Program
                                 sizeType++;
                             }
                             
-                            int sizePos = longestLine - StripAnsi(item.Text).Length - StripAnsi(item.Suffix).Length + 5;
+                            int sizePos = longestLine - _context.StripAnsi(item.Text).Length - _context.StripAnsi(item.Suffix).Length + 5;
                             builder.Append(i == _context.Menu.SelectedIndex ? Color.White.ToAnsi() : Color.LightGray.ToAnsi());
                             builder.Append(new string(' ', sizePos) + $"{sizeCalc.ToString("F1")} {_fileSizes[sizeType]}");
                         }
@@ -305,12 +316,6 @@ class Program
         //_context.IsDrawing = false;
     }
     
-    private static string StripAnsi(string input)
-    {
-        return AnsiRegex.Replace(input, "");
-    }
-
-
     private static void OnResize()
     {
         lock (_context.OutLock)
@@ -329,8 +334,13 @@ class Program
         _keybinds.Add(new NavDownKeybind(_context) { Keys = [Key.ArrowDown] });
         
         _keybinds.Add(new ClickKeybind(_context) { Keys = [Key.Enter] });
+        _keybinds.Add(new ClickKeybind(_context) { Keys = [Key.ArrowRight] });
+        _keybinds.Add(new CtrlClickKeybind(_context) { Keys = [Key.LeftCtrl, Key.Enter] });
+        _keybinds.Add(new CtrlClickKeybind(_context) { Keys = [Key.ArrowRight, Key.Enter] });
+        
         _keybinds.Add(new ReturnKeybind(_context) { Keys = [Key.Escape] });
         _keybinds.Add(new ReturnKeybind(_context) { Keys = [Key.Alt, Key.ArrowUp] });
+        _keybinds.Add(new ReturnKeybind(_context) { Keys = [Key.ArrowLeft] });
         
         _keybinds.Add(new SelectKeybind(_context) { Keys = [Key.Space] });
         _keybinds.Add(new MultiSelectKeybind(_context) { Keys = [Key.LeftShift, Key.Space] });
@@ -381,17 +391,13 @@ class Program
     private static void HandleKeyDown(InputListener listener, Key key, KeyDownEventArgs e)
     {
         List<Key> heldKeys = listener.GetHeldKeys().ToList();
-
         Keybind? bestMatch =
             _keybinds
                 .Where(kb => kb.Keys.All(k => heldKeys.Contains(k)))
                 .OrderByDescending(kb => kb.Keys.Count)
                 .FirstOrDefault();
 
-        if (bestMatch != null)
-        {
-            bestMatch.OnKeyDown(e);
-        }
+        bestMatch?.OnKeyDown(e);
     }
 
     private static void HandleKeyUp(InputListener listener, Key key)
@@ -405,9 +411,6 @@ class Program
                 .OrderByDescending(kb => kb.Keys.Count)
                 .FirstOrDefault();
 
-        if (bestMatch != null)
-        {
-            bestMatch.OnKeyUp();
-        }
+        bestMatch?.OnKeyUp();
     }
 }

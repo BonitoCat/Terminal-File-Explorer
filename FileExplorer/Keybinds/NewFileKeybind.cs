@@ -12,8 +12,7 @@ public class NewFileKeybind(MenuContext context) : Keybind(context)
             lock (_context.OutLock)
             {
                 Console.CursorVisible = true;
-                Console.Write($"{Color.Reset.ToAnsi()} File name: ");
-                text = _context.ReadLine();
+                text = _context.Input($"{Color.Reset.ToAnsi()} File name: ");
             
                 Console.CursorVisible = false;
                 if (text == null)

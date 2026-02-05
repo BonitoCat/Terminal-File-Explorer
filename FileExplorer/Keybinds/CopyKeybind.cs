@@ -1,3 +1,6 @@
+using System.IO.MemoryMappedFiles;
+using System.Net.Sockets;
+using System.Text;
 using CmdMenu;
 
 namespace FileExplorer.Keybinds;
@@ -6,31 +9,31 @@ public class CopyKeybind(MenuContext context) : Keybind(context)
 {
     public override void OnKeyUp()
     {
+        string[] paths = [];
         lock (_context.Menu.Lock)
         {
             if (_context.SelectedItems.Count > 0)
             {
-                _context.MoveItems.Clear();
-                _context.MoveItems.AddRange(_context.SelectedItems
-                                                    .Select(item => item.Data.GetValueOrDefault("FullPath", ""))
-                                                    .Where(path => !string.IsNullOrEmpty(path)));
+                paths = _context.SelectedItems
+                                .Select(item => item.Data.GetValueOrDefault("FullPath", ""))
+                                .Where(path => !string.IsNullOrEmpty(path))
+                                .ToArray();
             }
             else
             {
                 MenuItem? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
-                if (item?.Text == "..")
+                if (item == null || item.Text == "..")
                 {
                     return;
                 }
 
                 if (item.Data.TryGetValue("FullPath", out string? path))
                 {
-                    _context.MoveItems.Clear();
-                    _context.MoveItems.Add(path);
+                    paths = [path];
                 }
             }
 
-            _context.MoveStyle = MoveStyle.Copy;
+            Clipboard.Write(ClipboardMode.Copy, paths);
         }
     }
 }

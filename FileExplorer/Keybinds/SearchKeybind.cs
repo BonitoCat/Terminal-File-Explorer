@@ -12,8 +12,7 @@ public class SearchKeybind(MenuContext context) : Keybind(context)
             lock (_context.OutLock)
             {
                 Console.CursorVisible = true;
-                Console.Write($"{Color.Reset.ToAnsi()} Search: ");
-                search = _context.ReadLine(true);
+                search = _context.Input($"{Color.Reset.ToAnsi()} Search: ", enterNull: true);
             
                 Console.CursorVisible = false;
                 if (search == null)

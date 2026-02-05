@@ -9,16 +9,16 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
     {
         lock (_context.Menu.Lock)
         {
-            if (_context.Menu.GetItemAt(_context.Menu.SelectedIndex).Text == "..")
+            MenuItem? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
+            if (item == null || item.Text == "..")
             {
                 return;
             }
             
             Console.CursorVisible = true;
-            Console.Write($"{Color.Reset.ToAnsi()} Rename to: ");
-
-            string? name = _context.ReadLine()?.Trim();
-            if (name == null)
+            string? name = _context.Input($"{Color.Reset.ToAnsi()} Rename to: ", _context.StripAnsi(item.Text))?.Trim();
+            
+            if (name == null || name == _context.StripAnsi(item.Text))
             {
                 Console.CursorVisible = false;
                 Console.Clear();
@@ -28,7 +28,12 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
             }
             
             char[] invalidNameChars = Path.GetInvalidFileNameChars();
-            if (Encoding.Latin1.GetByteCount(name) != name.Length || name?.ToCharArray().Where(c => invalidNameChars.Contains(c)).ToList().Count > 0 || _context.Menu.GetItemsClone().Select(item => item.Text).Contains(name) || name == "..")
+            
+            if (Encoding.Latin1.GetByteCount(name) != name.Length ||
+                name?.ToCharArray().Any(c => invalidNameChars.Contains(c)) == true ||
+                _context.Menu.GetItemsClone()
+                        .Select(item => item.Text)
+                        .Contains(name) || name == "..")
             {
                 Console.CursorVisible = false;
                 Console.Clear();
@@ -41,8 +46,7 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
             {
                 while (input != null && input != "y" && input != "n")
                 {
-                    Console.Write($"\x1b[2K\r{Color.Reset.ToAnsi()} Are you sure? [Y/n]: ");
-                    input = _context.ReadLine(escapeNo: true)?.Trim().ToLower();
+                    input = _context.Input($"\x1b[2K{Color.Reset.ToAnsi()} Are you sure? [Y/n]: ", enterNull: true, escapeNo: true)?.Trim().ToLower();
                 }
 
                 if (input == "n")
@@ -57,7 +61,6 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
             
             try
             {
-                MenuItem? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
                 if (Directory.Exists(item?.Text))
                 {
                     Directory.Move(item.Text, name);

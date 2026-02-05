@@ -13,14 +13,16 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
             if (_context.SelectedItems.Count > 1)
             {
                 items.AddRange(_context.SelectedItems);
-                string? input;
-
                 lock (_context.OutLock)
                 {
+                    string? input;
                     do
                     {
-                        Console.Write($"\x1b[2K\r{Color.Reset.ToAnsi()} Are you sure you want to permanently delete {_context.SelectedItems.Count} items? [Y/n]: ");
-                        input = _context.ReadLine(escapeNo: true)?.Trim();
+                        input = _context.Input(
+                                $"\x1b[2K{Color.Reset.ToAnsi()} Are you sure you want to permanently delete {_context.SelectedItems.Count} items? [Y/n]: ",
+                                enterNull: true,
+                                escapeNo: true
+                            )?.Trim().ToLower();
                     
                         if (input == "n")
                         {
@@ -30,32 +32,34 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
                         
                             return;
                         }
-                    } while (input != null && input != "y");   
+                    } while (input != null && input != "y");
                 }
             }
             else
             {
-                MenuItem item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
+                MenuItem? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
                 if (_context.SelectedItems.Count == 1)
                 {
                     item = _context.SelectedItems[0];
                 }
 
-                if (item.Text == "..")
+                if (item?.Text == "..")
                 {
                     Console.CursorVisible = false;
                     return;
                 }
 
                 items.Add(item);
-                string? input;
-
                 lock (_context.OutLock)
                 {
+                    string? input;
                     do
                     {
-                        Console.Write($"\x1b[2K\r{Color.Reset.ToAnsi()} Are you sure you want to permanently delete '{item.Text}'? [Y/n]: ");
-                        input = _context.ReadLine(escapeNo: true)?.Trim();
+                        input = _context.Input(
+                                $"\x1b[2K{Color.Reset.ToAnsi()} Are you sure you want to permanently delete '{item.Text}'? [Y/n]: ",
+                                enterNull: true,
+                                escapeNo: true
+                            )?.Trim().ToLower();
                     
                         if (input == "n")
                         {

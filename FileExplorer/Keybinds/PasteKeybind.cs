@@ -8,9 +8,28 @@ public class PasteKeybind(MenuContext context) : Keybind(context)
     {
         lock (_context.Menu.Lock)
         {
-            if (_context.MoveStyle == MoveStyle.Cut)
+            Clipboard.Read(out ClipboardMode mode, out string[] paths);
+            if (mode == ClipboardMode.Copy)
             {
-                foreach (string itemPath in _context.MoveItems)
+                foreach (string itemPath in paths)
+                {
+                    try
+                    {
+                        if (Directory.Exists(itemPath))
+                        {
+                            _context.CopyDirectory(itemPath, Path.GetFileName(itemPath));
+                        }
+                        else if (File.Exists(itemPath))
+                        {
+                            File.Copy(itemPath, Path.GetFileName(itemPath));
+                        }
+                    }
+                    catch { }
+                }
+            }
+            else if (mode == ClipboardMode.Cut)
+            {
+                foreach (string itemPath in paths)
                 {
                     try
                     {
@@ -29,33 +48,15 @@ public class PasteKeybind(MenuContext context) : Keybind(context)
                     catch { }
                 }
             }
-            else if (_context.MoveStyle == MoveStyle.Copy)
-            {
-                foreach (string itemPath in _context.MoveItems)
-                {
-                    try
-                    {
-                        if (Directory.Exists(itemPath))
-                        {
-                            _context.CopyDirectory(itemPath, Path.GetFileName(itemPath));
-                        }
-                        else if (File.Exists(itemPath))
-                        {
-                            File.Copy(itemPath, Path.GetFileName(itemPath));
-                        }
-                    }
-                    catch { }
-                }
-            }
             else
             {
                 return;
             }
-            
-            _context.MoveStyle = MoveStyle.None;
-            Console.Clear();
-            
-            _context.RefreshItems();
         }
+        
+        Clipboard.Clear();
+        
+        Console.Clear();
+        _context.RefreshItems();
     }
 }

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using CmdMenu;
+using FileExplorer.FileTypes;
 using InputLib;
 using InputLib.EventArgs;
 using Microsoft.VisualBasic;
@@ -19,25 +20,7 @@ public class MenuContext
     private const string Blue = "132;180;250";
     public const string DarkBlue = "60;100;200";
     
-    private static readonly string[] ImageExtensions = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"];
-    
-    private static readonly string[] VideoExtensions =
-    [
-        ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".mpeg", ".mpg",
-        ".m4v", ".webm", ".3gp", ".ts", ".mts", ".m2ts", ".f4v", ".ogv",
-        ".rm", ".rv", ".vob", ".mxf", ".swf", ".drc", ".gif",
-    ];
-    
-    private static readonly string[] AudioExtensions =
-    [
-        ".mp3", ".wav", ".flac", ".aac", ".ogg", ".oga", ".wma",
-        ".m4a", ".alac", ".aiff", ".aif", ".opus", ".pcm", ".amr",
-        ".mid", ".midi", ".caf", ".dsd",
-    ];
-    
-    private static readonly string[] ArchiveExtensions = [".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz"];
-    
-    public Menu Menu { get; set; }
+    public required Menu Menu { get; set; }
     public InputListener? Listener { get; set; }
     public FileSystemWatcher? FileWatcher { get; set; }
     public FileSystemWatcher? ParentWatcher { get; set; }
@@ -59,6 +42,10 @@ public class MenuContext
     private int _foldersLoaded;
     private int _filesLoaded;
 
+    private static readonly Regex AnsiRegex =
+        new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])",
+            RegexOptions.Compiled);
+    
     public void RefreshItems()
     {
         SelectedItems.Clear();
@@ -118,6 +105,8 @@ public class MenuContext
             {
                 return;
             }
+            
+            RedrawMenu();
 
             _foldersLoaded = 0;
             Menu.GetItems().ForEach(item => UpdateFolderAttributes(item, RefreshCancelSource.Token));
@@ -158,8 +147,21 @@ public class MenuContext
                 return;
             }
 
+            RedrawMenu();
+            
             _filesLoaded = 0;
-            Menu.GetItems().ForEach(item => UpdateFileAttributes(item, RefreshCancelSource.Token));
+            Parallel.ForEach(Menu.GetItems(), item =>
+            {
+                string? fullPath = item.Data.GetValueOrDefault("FullPath");
+                if (fullPath != null)
+                {
+                    string? mime = MimeHelper.GetMimeType(fullPath);
+                    lock (item)
+                    {
+                        UpdateFileAttributes(item, mime, RefreshCancelSource.Token);
+                    }
+                }
+            });
             
             if (RefreshCancelSource.Token.IsCancellationRequested)
             {
@@ -228,7 +230,6 @@ public class MenuContext
 
         if (_foldersLoaded > 30)
         {
-            //UiDispatcher.ClearPending();
             RedrawMenu();
             
             _foldersLoaded = 0;
@@ -237,7 +238,7 @@ public class MenuContext
         _foldersLoaded++;
     }
 
-    public void UpdateFileAttributes(MenuItem file, CancellationToken token)
+    public void UpdateFileAttributes(MenuItem file, string? mime, CancellationToken token)
     {
         if (token.IsCancellationRequested)
         {
@@ -249,19 +250,43 @@ public class MenuContext
             return;
         }
 
-        string fileName = file.Text;
-        if (IsExecutable(fileName))
+        void XdgOpen()
         {
-            file.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
-            file.ForegroundColor = Color.FromRgbString(Green);
+            if (!OperatingSystem.IsLinux())
+            {
+                return;
+            }
 
-            file.Data.TryAdd("DefaultColor", Green);
-            file.Data.TryAdd("CutColor", DarkGreen);
+            Process proc = new()
+            {
+                StartInfo =
+                {
+                    FileName = "sh",
+                    Arguments = $"-c \"xdg-open '{file.Text}' >/dev/null 2>&1\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                },
+            };
             
-            file.Data.TryAdd("FileType", "Executable");
-            file.OnClick += () => OnClickExec(file);
+            proc.Start();
         }
-        else if (IsImage(fileName))
+        
+        string fileName = file.Text;
+        if (mime == null)
+        {
+            file.Data.TryAdd("DefaultColor", Color.White.ToRgbString());
+            file.Data.TryAdd("CutColor", Color.LightGray.ToRgbString());
+            
+            file.OnClick += () => TextFile.OnClick(this, file);
+        }
+        else if (mime.StartsWith("text/"))
+        {
+            file.Data.TryAdd("DefaultColor", Color.White.ToRgbString());
+            file.Data.TryAdd("CutColor", Color.LightGray.ToRgbString());
+            
+            file.OnClick += XdgOpen;
+        }
+        else if (mime.StartsWith("image/"))
         {
             file.Prefix = $"{Color.Yellow.ToAnsi()}\x1b[1m🖼  \x1b[0m";
             file.ForegroundColor = Color.Yellow;
@@ -270,9 +295,9 @@ public class MenuContext
             file.Data.TryAdd("CutColor", Color.Yellow.Transform(-70, -90, -40).ToRgbString());
             
             file.Data.TryAdd("FileType", "Image");
-            file.OnClick += () => OnClickImage(file);
+            file.OnClick += XdgOpen;
         }
-        else if (IsVideo(fileName))
+        else if (mime.StartsWith("video/"))
         {
             file.Prefix = $"{Color.Orange.ToAnsi()}\x1b[1m🎞  \x1b[0m";
             file.ForegroundColor = Color.Orange;
@@ -281,9 +306,9 @@ public class MenuContext
             file.Data.TryAdd("CutColor", Color.Orange.Transform(-40, -70, -50).ToRgbString());
             
             file.Data.TryAdd("FileType", "Video");
-            file.OnClick += () => OnClickVideo(file);
+            file.OnClick += XdgOpen;
         }
-        else if (IsAudio(fileName))
+        else if (mime.StartsWith("audio/"))
         {
             file.Prefix = $"{Color.FromRgbString(Red).ToAnsi()}\x1b[1m♪  \x1b[0m";
             file.ForegroundColor = Color.FromRgbString(Red);
@@ -292,25 +317,25 @@ public class MenuContext
             file.Data.TryAdd("CutColor", Color.Red.Transform(-40, -40, -20).ToRgbString());
             
             file.Data.TryAdd("FileType", "Audio");
-            file.OnClick += () => OnClickAudio(file);
+            file.OnClick += XdgOpen;
         }
-        else if (IsArchive(fileName))
+        else if (mime == "application/x-executable")
         {
-            file.Prefix = $"{Color.Orange.Transform(-50, -20, -20).ToAnsi()}\x1b[1m🗀  \x1b[0m";
-            file.ForegroundColor = Color.Orange.Transform(-50, -20, -20);
+            file.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
+            file.ForegroundColor = Color.FromRgbString(Green);
             
-            file.Data.TryAdd("DefaultColor", Color.Orange.Transform(-50, -20, -20).ToRgbString());
-            file.Data.TryAdd("CutColor", Color.Orange.Transform(-90, -90, -70).ToRgbString());
+            file.Data.TryAdd("DefaultColor", Green);
+            file.Data.TryAdd("CutColor", DarkGreen);
             
-            file.Data.TryAdd("FileType", "Archive");
-            file.OnClick += () => OnClickArchive(file);
+            file.Data.TryAdd("FileType", "Executable");
+            file.OnClick += () => ExecutableFile.OnClick(this, file);
         }
         else
         {
             file.Data.TryAdd("DefaultColor", Color.White.ToRgbString());
             file.Data.TryAdd("CutColor", Color.LightGray.ToRgbString());
             
-            file.OnClick += () => OnClickFile(file);
+            file.OnClick += XdgOpen;
         }
         
         FileAttributes attributes = File.GetAttributes(fileName);
@@ -325,7 +350,6 @@ public class MenuContext
         
         if (_filesLoaded > 30)
         {
-            //UiDispatcher.ClearPending();
             RedrawMenu();
             
             _filesLoaded = 0;
@@ -432,190 +456,9 @@ public class MenuContext
         };
         
         RefreshItems();
+        
         Menu.ViewIndex = 0;
-    }
-
-    public void OnClickFile(MenuItem sender)
-    {
-        Listener.RaiseEvents = false;
-        
-        int lines = Console.WindowHeight;
-        int columns = Console.WindowWidth;
-        Console.WriteLine($"\x1b[8;{Math.Max(lines, 45)};{Math.Max(Console.WindowWidth, 80)}t");
-        
-        Process proc = new()
-        {
-            StartInfo =
-            {
-                FileName = "nano",
-                Arguments = sender.Text,
-                UseShellExecute = false,
-            },
-        };
-
-        lock (Menu.Lock)
-        {
-            proc.Start();
-            proc.WaitForExit();
-
-            Console.CursorVisible = false;
-            Console.Clear();
-            Console.WriteLine($"\x1b[8;{lines};{columns}t");
-            RedrawMenu();
-        }
-
-        Listener.RaiseEvents = true;
-    }
-
-    public void OnClickImage(MenuItem sender)
-    {
-        Process proc = new()
-        {
-            StartInfo =
-            {
-                FileName = "xdg-open",
-                Arguments = $"\"{sender.Text}\"",
-                UseShellExecute = false
-            }
-        };
-        proc.Start();
-    }
-
-    public void OnClickVideo(MenuItem sender)
-    {
-        OnClickImage(sender);
-    }
-
-    public void OnClickAudio(MenuItem sender)
-    {
-        OnClickImage(sender);
-    }
-
-    public void OnClickExec(MenuItem sender)
-    {
-        Process proc = new()
-        {
-            StartInfo =
-            {
-                FileName = "gnome-terminal",
-                Arguments = $"-- bash -c '{Path.GetFullPath(sender.Text)}'; exec bash",
-                UseShellExecute = false
-            }
-        };
-
-        proc.Start();
-        proc.WaitForExit();
-    }
-
-    public void OnClickArchive(MenuItem sender)
-    {
-        lock (OutLock)
-        {
-            Console.CursorVisible = true;
-            string? input = "";
-            
-            while (input != null && input != "y" && input != "n")
-            {
-                Console.Write($"\x1b[2K\r{Color.Reset.ToAnsi()} Do you want to extract the content of '{sender.Text}'? [Y/n]: ");
-                input = ReadLine(escapeNo: true)?.Trim();
-            }
-            
-            Console.CursorVisible = false;
-            if (input == "n")
-            {
-                Console.Clear();
-                RedrawMenu();
-                
-                return;
-            }
-            
-            ProcessStartInfo startInfo = new()
-            {
-                FileName = "tar",
-            };
-        
-            if (sender.Text.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-            {
-                startInfo.FileName = "unzip";
-                startInfo.Arguments = $"-qn \"{sender.Text}\"";
-            }
-            else if (sender.Text.EndsWith(".tar", StringComparison.OrdinalIgnoreCase))
-            {
-                startInfo.Arguments = $"-xf \"{sender.Text}\"";
-            }
-            else if (sender.Text.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase))
-            {
-                startInfo.Arguments = $"-xzf \"{sender.Text}\"";
-            }
-            else if (sender.Text.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase))
-            {
-                startInfo.Arguments = $"-xzf \"{sender.Text}\"";
-            }
-            else if (sender.Text.EndsWith(".tar.bz2", StringComparison.OrdinalIgnoreCase))
-            {
-                startInfo.Arguments = $"-xjf \"{sender.Text}\"";
-            }
-            else if (sender.Text.EndsWith(".tar.xz", StringComparison.OrdinalIgnoreCase))
-            {
-                startInfo.Arguments = $"-xJf \"{sender.Text}\"";
-            }
-            else
-            {
-                InputListener.DisableEcho();
-                Listener?.StartListening();
-            
-                return;
-            }
-        
-            Process? proc = Process.Start(startInfo);
-            proc?.WaitForExit();   
-        }
-        
-        InputListener.DisableEcho();
-        Listener?.StartListening();
-
-        Console.Clear();
-        RefreshItems();
-    }
-
-    public bool IsExecutable(string path)
-    {
-        Process process = new()
-        {
-            StartInfo = new()
-            {
-                FileName = "bash",
-                Arguments = $"-c \"[ -x \\\"{path}\\\" ]\"",
-                RedirectStandardOutput = false,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            }
-        };
-        
-        process.Start();
-        process.WaitForExit();
-        
-        return process.ExitCode == 0;
-    }
-    
-    public bool IsImage(string path)
-    {
-        return ImageExtensions.Contains(Path.GetExtension(path).ToLower());
-    }
-    
-    public bool IsVideo(string path)
-    {
-        return VideoExtensions.Contains(Path.GetExtension(path).ToLower());
-    }
-
-    public bool IsAudio(string path)
-    {
-        return AudioExtensions.Contains(Path.GetExtension(path).ToLower());
-    }
-
-    public bool IsArchive(string path)
-    {
-        return ArchiveExtensions.Any(ext => path.ToLower().EndsWith(ext));
+        Menu.SelectedIndex = 0;
     }
     
     public bool RequiresElevatedAccess(string path)
@@ -643,7 +486,7 @@ public class MenuContext
         }
     }
 
-    public string? ReadLine(bool enterNull = false, bool escapeNo = false)
+    public string? Input(string inputText, string startValue = "", bool enterNull = false, bool escapeNo = false)
     {
         Listener.RaiseEvents = false;
         Thread.Sleep(100);
@@ -655,42 +498,87 @@ public class MenuContext
             return "";
         }
         
+        Console.CursorVisible = true;
+        
         keyListener.StartListening();
-        StringBuilder builder = new();
+        StringBuilder builder = new(startValue);
         string? result = null;
 
+        int cursor = builder.Length;
+        void Redraw()
+        {
+            int top = Console.CursorTop;
+
+            Console.SetCursorPosition(0, top);
+            Console.Write("\x1b[2K");
+            Console.SetCursorPosition(0, top);
+
+            Console.Write(inputText + builder);
+            Console.SetCursorPosition(cursor + StripAnsi(inputText).Length, top);
+        }
+        
         void OnKeyDown(Key key, KeyDownEventArgs e)
         {
             if (key == Key.Enter)
             {
-                if (enterNull)
-                {
-                    result = string.IsNullOrEmpty(builder.ToString()) ? null : builder.ToString();
-                }
-                else
-                {
-                    result = string.IsNullOrEmpty(builder.ToString()) ? "y" : builder.ToString();
-                }
-                
+                result = enterNull && builder.Length == 0
+                    ? null
+                    : builder.ToString();
+
                 keyListener.Dispose();
+                return;
             }
-            
-            if (key == Key.Backspace)
+
+            switch (key)
             {
-                if (builder.Length > 0)
-                {
-                    builder.Length--;
-                    Console .Write("\b \b");
-                }
+                case Key.ArrowLeft:
+                    if (cursor > 0)
+                    {
+                        cursor--;
+                        Redraw();
+                    }
+                    
+                    return;
+
+                case Key.ArrowRight:
+                    if (cursor < builder.Length)
+                    {
+                        cursor++;
+                        Redraw();
+                    }
+                    
+                    return;
+
+                case Key.Backspace:
+                    if (cursor > 0)
+                    {
+                        builder.Remove(cursor - 1, 1);
+                        cursor--;
+                        Redraw();
+                    }
+                    
+                    return;
+                
+                case Key.Delete:
+                    if (cursor == builder.Length)
+                    {
+                        return;
+                    }
+                    else
+                    {
+                        builder.Remove(cursor, 1);
+                        Redraw();
+                    }
+                    
+                    return;
             }
-            else
+
+            char c = keyListener.GetKeyChar(key);
+            if (c != '\0')
             {
-                char c = keyListener.GetKeyChar(key);
-                if (c != '\0')
-                {
-                    builder.Append(c);
-                    Console.Write(c);
-                }
+                builder.Insert(cursor, c);
+                cursor++;
+                Redraw();
             }
         }
         
@@ -706,6 +594,8 @@ public class MenuContext
         keyListener.OnKeyDown += OnKeyDown;
         keyListener.OnKeyUp += OnKeyUp;
 
+        Redraw();
+        
         keyListener.WaitForDispose();
         keyListener.OnKeyDown -= OnKeyDown;
         keyListener.OnKeyUp -= OnKeyUp;
@@ -715,8 +605,15 @@ public class MenuContext
         
         Listener.ConsumeNextKeyDown(Key.Enter);
         Listener.ConsumeNextKeyUp(Key.Enter);
+        
+        Console.CursorVisible = false;
 
         return result;
+    }
+    
+    public string StripAnsi(string input)
+    {
+        return AnsiRegex.Replace(input, "");
     }
     
     public void CopyDirectory(string sourceDir, string destinationDir)

@@ -12,8 +12,7 @@ public class NewFolderKeybind(MenuContext context) : Keybind(context)
             lock (_context.OutLock)
             {
                 Console.CursorVisible = true;
-                Console.Write($"{Color.Reset.ToAnsi()} Directory name: ");
-                text = _context.ReadLine();
+                text = _context.Input($"{Color.Reset.ToAnsi()} Directory name: ");
                             
                 Console.CursorVisible = false;
                 if (text == null)

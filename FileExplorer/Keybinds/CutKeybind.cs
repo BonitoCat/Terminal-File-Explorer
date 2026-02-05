@@ -6,34 +6,34 @@ public class CutKeybind(MenuContext context) : Keybind(context)
 {
     public override void OnKeyUp()
     {
+        string[] paths = [];
         lock (_context.Menu.Lock)
         {
             if (_context.SelectedItems.Count > 0)
             {
-                _context.MoveItems.Clear();
-                _context.MoveItems.AddRange(_context.SelectedItems
-                                                    .Select(item => item.Data.GetValueOrDefault("FullPath", ""))
-                                                    .Where(path => !string.IsNullOrEmpty(path)));
+                paths = _context.SelectedItems
+                                .Select(item => item.Data.GetValueOrDefault("FullPath", ""))
+                                .Where(path => !string.IsNullOrEmpty(path))
+                                .ToArray();
             }
             else
             {
                 MenuItem? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
-                if (item?.Text == "..")
+                if (item == null || item.Text == "..")
                 {
                     return;
                 }
-                
+
                 if (item.Data.TryGetValue("FullPath", out string? path))
                 {
-                    _context.MoveItems.Clear();
-                    _context.MoveItems.Add(path);
+                    paths = [path];
                 }
             }
 
-            _context.MoveStyle = MoveStyle.Cut;
-            _context.SelectedItems.Clear();
+            Clipboard.Write(ClipboardMode.Cut, paths);
         }
 
         _context.RedrawMenu();
     }
+    
 }

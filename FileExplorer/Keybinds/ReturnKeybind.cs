@@ -23,13 +23,7 @@ public class ReturnKeybind(MenuContext context) : Keybind(context)
         }
         else
         {
-            if (_context.Menu.GetItems().Where(item => item.Text == "..").ToList().Count == 0)
-            {
-                return;
-            }
-                        
-            _context.Menu.SelectedIndex = 0;
-            _context.Menu.CallSelectedItemClick();
+            _context.Menu.GetItems().FirstOrDefault(item => item.Text == "..")?.CallOnClick();
         }
         
         _context.RedrawMenu();

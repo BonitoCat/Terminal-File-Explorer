@@ -13,8 +13,7 @@ public class DirPathKeybind(MenuContext context) : Keybind(context)
             string? input = "";
             lock (_context.OutLock)
             {
-                Console.Write($"{Color.Reset.ToAnsi()} Path of directory: ");
-                input = _context.ReadLine();
+                input = _context.Input($"{Color.Reset.ToAnsi()} Path of directory: ");
 
                 if (input == null)
                 {

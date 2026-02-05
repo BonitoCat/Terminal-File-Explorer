@@ -10,7 +10,7 @@ public class NemoKeybind(MenuContext context) : Keybind(context)
         proc.StartInfo = new ProcessStartInfo
         {
             FileName = "nemo",
-            Arguments = Directory.GetCurrentDirectory(),
+            Arguments = $"\"{Directory.GetCurrentDirectory()}\"",
             RedirectStandardOutput = true,
             RedirectStandardInput = true,
             RedirectStandardError = true,

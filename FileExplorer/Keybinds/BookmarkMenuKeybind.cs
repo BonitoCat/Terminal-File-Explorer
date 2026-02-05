@@ -10,6 +10,7 @@ public class BookmarkMenuKeybind(MenuContext context) : Keybind(context)
         {
             string cwd = Directory.GetCurrentDirectory();
             _context.OnClickDir(new(_context.BookmarkDir), cwd != _context.BookmarkDir);
+            
             Task.Run(() =>
             {
                 Task.Delay(20).Wait();

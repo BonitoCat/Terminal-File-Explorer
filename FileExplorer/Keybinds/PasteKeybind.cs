@@ -1,3 +1,4 @@
+using CmdMenu.Controls;
 using InputLib.EventArgs;
 
 namespace FileExplorer.Keybinds;
@@ -37,12 +38,21 @@ public class PasteKeybind(MenuContext context) : Keybind(context)
                         if (Directory.Exists(itemPath))
                         {
                             Directory.Move(itemPath, name);
-                            _context.SelectedItems.Add(_context.Menu.GetItemByText(name));
+                            
                         }
                         else if (File.Exists(itemPath))
                         {
                             File.Move(itemPath, name);
-                            _context.SelectedItems.Add(_context.Menu.GetItemByText(name));
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                        
+                        CmdListBoxItem<CmdLabel>? item = _context.Menu.Items.FirstOrDefault(item => item.Item.Text == name);
+                        if (item != null)
+                        {
+                            _context.SelectedItems.Add(item.Item);
                         }
                     }
                     catch { }

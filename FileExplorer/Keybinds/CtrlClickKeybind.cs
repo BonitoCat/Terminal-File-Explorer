@@ -1,4 +1,5 @@
 using CmdMenu;
+using CmdMenu.Controls;
 using FileExplorer.FileTypes;
 using InputLib.EventArgs;
 
@@ -13,7 +14,7 @@ public class CtrlClickKeybind(MenuContext context) : Keybind(context)
             return;
         }
         
-        MenuItem? item = _context.Menu.SelectedItem;
+        CmdListBoxItem<CmdLabel>? item = _context.Menu.SelectedItem;
         if (item == null)
         {
             return;
@@ -24,6 +25,6 @@ public class CtrlClickKeybind(MenuContext context) : Keybind(context)
             return;
         }
         
-        TextFile.OnClick(_context, item);
+        TextFile.OnClick(_context, item.Item);
     }
 }

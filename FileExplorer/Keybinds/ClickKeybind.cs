@@ -1,4 +1,4 @@
-using CmdMenu;
+using CmdMenu.Controls;
 using InputLib.EventArgs;
 
 namespace FileExplorer.Keybinds;
@@ -7,7 +7,12 @@ public class ClickKeybind(MenuContext context) : Keybind(context)
 {
     public override void OnKeyDown(KeyDownEventArgs e)
     {
-        string text = _context.Menu.SelectedItem?.Text ?? "..";
+        if (_context.Menu.SelectedItem is not CmdListBoxItem<CmdLabel> selectedLabel)
+        {
+            return;
+        }
+        
+        string text = selectedLabel.Item.Text ?? "..";
         if (_context.Menu.SelectedItem?.Data.TryGetValue("DestinationPath", out string? destPath) ?? false)
         {
             _context.OnClickDir(new(destPath));
@@ -33,9 +38,9 @@ public class ClickKeybind(MenuContext context) : Keybind(context)
         }
     }
 
-    private void OnItemAdded(MenuItem item)
+    private void OnItemAdded(CmdListBoxItem<CmdLabel> item)
     {
-        if (item.Text == "..")
+        if (item.Item.Text == "..")
         {
             return;
         }

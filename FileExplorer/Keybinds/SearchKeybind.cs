@@ -1,4 +1,5 @@
 using CmdMenu;
+using InputLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -12,6 +13,10 @@ public class SearchKeybind(MenuContext context) : Keybind(context)
             lock (_context.OutLock)
             {
                 Console.CursorVisible = true;
+                
+                _context.Listener.ConsumeNextKeyDown(Key.F);
+                _context.Listener.ConsumeNextKeyUp(Key.F);
+                
                 search = _context.Input($"{Color.Reset.ToAnsi()} Search: ", enterNull: true);
             
                 Console.CursorVisible = false;
@@ -37,6 +42,7 @@ public class SearchKeybind(MenuContext context) : Keybind(context)
             {
                 Console.Clear();
             }
+            
             _context.RedrawMenu();
         }
     }

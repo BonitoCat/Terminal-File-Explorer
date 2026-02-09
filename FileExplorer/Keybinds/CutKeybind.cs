@@ -1,4 +1,5 @@
 using CmdMenu;
+using CmdMenu.Controls;
 
 namespace FileExplorer.Keybinds;
 
@@ -18,8 +19,8 @@ public class CutKeybind(MenuContext context) : Keybind(context)
             }
             else
             {
-                MenuItem? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
-                if (item == null || item.Text == "..")
+                CmdListBoxItem<CmdLabel>? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
+                if (item == null || item.Item.Text == "..")
                 {
                     return;
                 }

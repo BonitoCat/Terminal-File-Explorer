@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using CmdMenu;
+using CmdMenu.Controls;
 using InputLib;
 
 namespace FileExplorer.FileTypes;
@@ -8,7 +9,7 @@ public static class ArchiveFile
 {
     public static readonly string[] ArchiveExtensions = [".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz"];
     
-    public static void OnClick(MenuContext context, MenuItem sender)
+    public static void OnClick(MenuContext context, CmdLabel sender)
     {
         lock (context.OutLock)
         {

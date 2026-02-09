@@ -1,13 +1,12 @@
-using System.CodeDom.Compiler;
 using System.Diagnostics;
+using System.Reflection.Emit;
 using System.Text;
 using System.Text.RegularExpressions;
 using CmdMenu;
+using CmdMenu.Controls;
 using FileExplorer.FileTypes;
 using InputLib;
 using InputLib.EventArgs;
-using Microsoft.VisualBasic;
-using Microsoft.VisualBasic.FileIO;
 using SearchOption = System.IO.SearchOption;
 
 namespace FileExplorer;
@@ -20,7 +19,7 @@ public class MenuContext
     private const string Blue = "132;180;250";
     public const string DarkBlue = "60;100;200";
     
-    public required Menu Menu { get; set; }
+    public required CmdListBox<CmdLabel> Menu { get; set; }
     public InputListener? Listener { get; set; }
     public FileSystemWatcher? FileWatcher { get; set; }
     public FileSystemWatcher? ParentWatcher { get; set; }
@@ -30,17 +29,18 @@ public class MenuContext
     public string BookmarkDir { get; set; } = "";
     public string? SearchString { get; set; }
     public Stack<string> DirHistory { get; set; } = new();
-    public List<MenuItem> SelectedItems { get; } = new();
+    public List<CmdLabel> SelectedItems { get; } = new();
     public List<string> MoveItems { get; } = new();
     public MoveStyle? MoveStyle { get; set; } = FileExplorer.MoveStyle.None;
     public CancellationTokenSource RefreshCancelSource { get; set; } = new();
+    public bool CanDraw { get; private set; } = true;
+    public string Cwd { get; set; } = "/";
     public object OutLock { get; } = new();
-    //public bool IsDrawing { get; set; }
-    public bool RedrawRequested { get; set; }
     public readonly ManualResetEventSlim ExitEvent = new();
 
     private int _foldersLoaded;
     private int _filesLoaded;
+    private int _redrawPending;
 
     private static readonly Regex AnsiRegex =
         new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])",
@@ -52,7 +52,6 @@ public class MenuContext
         Menu.ClearItems();
 
         RefreshCancelSource.Cancel();
-        Task.Delay(50).Wait();
         RefreshCancelSource = new();
         
         Task.Run(() =>
@@ -60,17 +59,21 @@ public class MenuContext
             string cwd = Directory.GetCurrentDirectory();
             if (Directory.GetParent(cwd) != null)
             {
-                MenuItem item = new("..", Color.White)
+                CmdLabel item = new("..", Color.White)
                 {
                     Prefix = "   ",
+                };
+                
+                CmdListBoxItem<CmdLabel> lbItem = new(item)
+                {
                     Data =
                     {
                         {"ItemType", "Folder"},
                     },
                 };
-                item.OnClick += () => OnClickDir(item);
+                lbItem.OnClick += () => OnClickDir(item);
                 
-                Menu.AddItem(item);
+                Menu.AddItem(lbItem);
             }
 
             NaturalStringComparer naturalComparer = new();
@@ -82,9 +85,13 @@ public class MenuContext
                 dirPaths
                     .Select(dirPath =>
                     {
-                        return new MenuItem(Path.GetFileName(dirPath), Color.FromRgbString(Blue))
+                        CmdLabel item = new(Path.GetFileName(dirPath), Color.FromRgbString(Blue))
                         {
                             Prefix = $"{Color.FromRgbString(Blue).ToAnsi()}\x1b[1m🗁  \x1b[0m",
+                        };
+                        
+                        CmdListBoxItem<CmdLabel> lbItem = new(item)
+                        {
                             Data =
                             {
                                 {"ItemType", "Folder"},
@@ -93,12 +100,14 @@ public class MenuContext
                                 {"CutColor", DarkBlue},
                             },
                         };
+
+                        return lbItem;
                     })
-                    .Where(item => ShowHiddenFiles || !new DirectoryInfo(item.Text).Attributes.HasFlag(FileAttributes.Hidden))
+                    .Where(item => ShowHiddenFiles || !new DirectoryInfo(item.Item.Text).Attributes.HasFlag(FileAttributes.Hidden))
                     .Where(item => SearchString == null ||
-                                   (SearchString != null && item.Text.Contains(SearchString, StringComparison.CurrentCultureIgnoreCase)))
-                    .OrderBy(item => item.Text.StartsWith('.'))
-                    .ThenBy(item => item.Text, naturalComparer)
+                                   (SearchString != null && item.Item.Text.Contains(SearchString, StringComparison.CurrentCultureIgnoreCase)))
+                    .OrderBy(item => item.Item.Text.StartsWith('.'))
+                    .ThenBy(item => item.Item.Text, naturalComparer)
                     .ToList());
 
             if (RefreshCancelSource.Token.IsCancellationRequested)
@@ -109,7 +118,7 @@ public class MenuContext
             RedrawMenu();
 
             _foldersLoaded = 0;
-            Menu.GetItems().ForEach(item => UpdateFolderAttributes(item, RefreshCancelSource.Token));
+            Menu.Items.ToList().ForEach(item => UpdateFolderAttributes(item, RefreshCancelSource.Token));
             
             if (RefreshCancelSource.Token.IsCancellationRequested)
             {
@@ -125,9 +134,13 @@ public class MenuContext
                 fileNames
                     .Select(filePath =>
                     {
-                        return new MenuItem(Path.GetFileName(filePath))
+                        CmdLabel item = new(Path.GetFileName(filePath))
                         {
                             Prefix = $"{Color.White.ToAnsi()}\x1b[1m🗏︎  \x1b[0m",
+                        };
+
+                        return new CmdListBoxItem<CmdLabel>(item)
+                        {
                             Data =
                             {
                                 {"ItemType", "File"},
@@ -135,11 +148,11 @@ public class MenuContext
                             },
                         };
                     })
-                    .Where(item => ShowHiddenFiles || !File.GetAttributes(item.Text).HasFlag(FileAttributes.Hidden))
+                    .Where(item => ShowHiddenFiles || !File.GetAttributes(item.Item.Text).HasFlag(FileAttributes.Hidden))
                     .Where(item => SearchString == null ||
-                                   (SearchString != null && item.Text.Contains(SearchString, StringComparison.CurrentCultureIgnoreCase)))
-                    .OrderBy(item => item.Text.StartsWith('.'))
-                    .ThenBy(item => item.Text, naturalComparer)
+                                   (SearchString != null && item.Item.Text.Contains(SearchString, StringComparison.CurrentCultureIgnoreCase)))
+                    .OrderBy(item => item.Item.Text.StartsWith('.'))
+                    .ThenBy(item => item.Item.Text, naturalComparer)
                     .ToList());
             
             if (RefreshCancelSource.Token.IsCancellationRequested)
@@ -150,18 +163,60 @@ public class MenuContext
             RedrawMenu();
             
             _filesLoaded = 0;
-            Parallel.ForEach(Menu.GetItems(), item =>
+            Task task = Parallel.ForEachAsync(Menu.Items, async (item, token) =>
             {
-                string? fullPath = item.Data.GetValueOrDefault("FullPath");
-                if (fullPath != null)
+                if (RefreshCancelSource.Token.IsCancellationRequested)
                 {
-                    string? mime = MimeHelper.GetMimeType(fullPath);
-                    lock (item)
-                    {
-                        UpdateFileAttributes(item, mime, RefreshCancelSource.Token);
-                    }
+                    return;
+                }
+                
+                if (!item.Data.TryGetValue("FullPath", out string? fullPath))
+                {
+                    return;
+                }
+
+                string? mime = MimeHelper.GetMimeType(fullPath);
+                UpdateFileAttributes(item, mime, RefreshCancelSource.Token);
+
+                if (_filesLoaded % 15 == 0)
+                {
+                    RedrawMenu();
+                    await Task.Yield();
                 }
             });
+
+            Task.Run(() =>
+            {
+                task.Wait(RefreshCancelSource.Token);
+                RedrawMenu();
+            });
+            
+            /*Task.Run(async () =>
+            {
+                foreach (CmdLabel item in Menu.Items)
+                {
+                    if (RefreshCancelSource.Token.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
+                    if (!item.Data.TryGetValue("FullPath", out string? fullPath))
+                    {
+                        continue;
+                    }
+
+                    string? mime = MimeHelper.GetMimeType(fullPath);
+                    UpdateFileAttributes(item, mime, RefreshCancelSource.Token);
+
+                    if (_filesLoaded % 15 == 0)
+                    {
+                        RedrawMenu();
+                        await Task.Yield();
+                    }
+                }
+
+                RedrawMenu();
+            });*/
             
             if (RefreshCancelSource.Token.IsCancellationRequested)
             {
@@ -189,7 +244,7 @@ public class MenuContext
         }, RefreshCancelSource.Token);
     }
     
-    public void UpdateFolderAttributes(MenuItem dir, CancellationToken token)
+    public void UpdateFolderAttributes(CmdListBoxItem<CmdLabel> dir, CancellationToken token)
     {
         if (token.IsCancellationRequested)
         {
@@ -201,31 +256,31 @@ public class MenuContext
             return;
         }
         
-        string dirName = dir.Text;
+        string dirName = dir.Item.Text;
         if (dirName == "..")
         {
             return;
         }
         
-        if (MoveItems.Contains(Path.GetFullPath(dir.Text)))
+        if (MoveItems.Contains(Path.GetFullPath(dir.Item.Text)))
         {
-            dir.ForegroundColor = Color.FromRgbString(DarkBlue);
+            dir.Item.Style.Foreground = Color.FromRgbString(DarkBlue);
         }
         
         if (RequiresElevatedAccess(dirName) && Environment.UserName != "root")
         {
-            dir.Suffix += $"{Color.Orange.ToAnsi()} (Access Denied)";
+            dir.Item.Suffix += $"{Color.Orange.ToAnsi()} (Access Denied)";
         }
         else
         {
-            dir.OnClick += () => OnClickDir(dir);
+            dir.OnClick += () => OnClickDir(dir.Item);
         }
         
         FileAttributes attributes = new DirectoryInfo(dirName).Attributes;
         if (attributes.HasFlag(FileAttributes.Hidden))
         {
             dir.Data.TryAdd("InfoHidden", "Hidden");
-            dir.Suffix += $"{Color.Gray.ToAnsi()} (Hidden)";
+            dir.Item.Suffix += $"{Color.Gray.ToAnsi()} (Hidden)";
         }
 
         if (_foldersLoaded > 30)
@@ -238,7 +293,7 @@ public class MenuContext
         _foldersLoaded++;
     }
 
-    public void UpdateFileAttributes(MenuItem file, string? mime, CancellationToken token)
+    public void UpdateFileAttributes(CmdListBoxItem<CmdLabel> file, string? mime, CancellationToken token)
     {
         if (token.IsCancellationRequested)
         {
@@ -250,34 +305,13 @@ public class MenuContext
             return;
         }
 
-        void XdgOpen()
-        {
-            if (!OperatingSystem.IsLinux())
-            {
-                return;
-            }
-
-            Process proc = new()
-            {
-                StartInfo =
-                {
-                    FileName = "sh",
-                    Arguments = $"-c \"xdg-open '{file.Text}' >/dev/null 2>&1\"",
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                },
-            };
-            
-            proc.Start();
-        }
-        
-        string fileName = file.Text;
+        string fileName = file.Item.Text;
         if (mime == null)
         {
             file.Data.TryAdd("DefaultColor", Color.White.ToRgbString());
             file.Data.TryAdd("CutColor", Color.LightGray.ToRgbString());
             
-            file.OnClick += () => TextFile.OnClick(this, file);
+            file.OnClick += () => TextFile.OnClick(this, file.Item);
         }
         else if (mime.StartsWith("text/"))
         {
@@ -288,8 +322,8 @@ public class MenuContext
         }
         else if (mime.StartsWith("image/"))
         {
-            file.Prefix = $"{Color.Yellow.ToAnsi()}\x1b[1m🖼  \x1b[0m";
-            file.ForegroundColor = Color.Yellow;
+            file.Item.Prefix = $"{Color.Yellow.ToAnsi()}\x1b[1m🖼  \x1b[0m";
+            file.Item.Style.Foreground = Color.Yellow;
             
             file.Data.TryAdd("DefaultColor", Color.Yellow.ToRgbString());
             file.Data.TryAdd("CutColor", Color.Yellow.Transform(-70, -90, -40).ToRgbString());
@@ -299,10 +333,10 @@ public class MenuContext
         }
         else if (mime.StartsWith("video/"))
         {
-            file.Prefix = $"{Color.Orange.ToAnsi()}\x1b[1m🎞  \x1b[0m";
-            file.ForegroundColor = Color.Orange;
+            file.Item.Prefix = $"{Color.Orange.ToAnsi()}\x1b[1m🎞  \x1b[0m";
+            file.Item.Style.Foreground = Color.Orange;
             
-            file.Data.TryAdd("DefaultColor", Color.Orange.ToAnsi());
+            file.Data.TryAdd("DefaultColor", Color.Orange.ToRgbString());
             file.Data.TryAdd("CutColor", Color.Orange.Transform(-40, -70, -50).ToRgbString());
             
             file.Data.TryAdd("FileType", "Video");
@@ -310,8 +344,8 @@ public class MenuContext
         }
         else if (mime.StartsWith("audio/"))
         {
-            file.Prefix = $"{Color.FromRgbString(Red).ToAnsi()}\x1b[1m♪  \x1b[0m";
-            file.ForegroundColor = Color.FromRgbString(Red);
+            file.Item.Prefix = $"{Color.FromRgbString(Red).ToAnsi()}\x1b[1m♪  \x1b[0m";
+            file.Item.Style.Foreground = Color.FromRgbString(Red);
             
             file.Data.TryAdd("DefaultColor", Color.Red.ToRgbString());
             file.Data.TryAdd("CutColor", Color.Red.Transform(-40, -40, -20).ToRgbString());
@@ -319,16 +353,28 @@ public class MenuContext
             file.Data.TryAdd("FileType", "Audio");
             file.OnClick += XdgOpen;
         }
-        else if (mime == "application/x-executable")
+        else if (mime == "application/vnd.debian.binary-package")
         {
-            file.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
-            file.ForegroundColor = Color.FromRgbString(Green);
+            Color color = Color.Yellow.Transform(-20, -20, -20);
+            file.Item.Prefix = $"{color.ToAnsi()}\x1b[1mᐅ  \x1b[0m";
+            file.Item.Style.Foreground = color;
+            
+            file.Data.TryAdd("DefaultColor", color.ToRgbString());
+            file.Data.TryAdd("CutColor", color.Transform(-70, -90, -40).ToRgbString());
+            
+            file.Data.TryAdd("FileType", "Deb");
+            file.OnClick += XdgOpen;
+        }
+        else if (ExecutableFile.IsExecutable(file.Item.Text))
+        {
+            file.Item.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
+            file.Item.Style.Foreground = Color.FromRgbString(Green);
             
             file.Data.TryAdd("DefaultColor", Green);
             file.Data.TryAdd("CutColor", DarkGreen);
             
             file.Data.TryAdd("FileType", "Executable");
-            file.OnClick += () => ExecutableFile.OnClick(this, file);
+            file.OnClick += () => ExecutableFile.OnClick(this, file.Item);
         }
         else
         {
@@ -342,7 +388,7 @@ public class MenuContext
         if (attributes.HasFlag(FileAttributes.Hidden))
         {
             file.Data.TryAdd("InfoHidden", "Hidden");
-            file.Suffix += $"{Color.Gray.ToAnsi()} (Hidden)";
+            file.Item.Suffix += $"{Color.Gray.ToAnsi()} (Hidden)";
         }
 
         FileInfo info = new(fileName);
@@ -351,58 +397,88 @@ public class MenuContext
         if (_filesLoaded > 30)
         {
             RedrawMenu();
-            
             _filesLoaded = 0;
         }
 
         _filesLoaded++;
+        return;
+
+        void XdgOpen()
+        {
+            if (!OperatingSystem.IsLinux())
+            {
+                return;
+            }
+
+            Process proc = new()
+            {
+                StartInfo =
+                {
+                    FileName = "sh",
+                    Arguments = $"-c \"xdg-open '{file.Item.Text}' >/dev/null 2>&1\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                },
+            };
+            
+            proc.Start();
+        }
     }
 
     public void RedrawMenu()
     {
-        //UiDispatcher.Post(() => Menu.MenuUpdate.Invoke());
-        /*if (IsDrawing)
+        if (Interlocked.Exchange(ref _redrawPending, 1) == 1)
         {
             return;
-        }*/
-        
+        }
+
         Task.Run(() =>
         {
             Menu.MenuUpdate.Invoke();
+            Interlocked.Exchange(ref _redrawPending, 0);
         });
-        
-        //RedrawRequested = true;
+    }
+
+    public void DisableDrawing()
+    {
+        CanDraw = false;
+    }
+
+    public void EnableDrawing()
+    {
+        CanDraw = true;
     }
     
-    public void OnClickDir(MenuItem sender, bool saveToHistory = true)
+    public void OnClickDir(CmdLabel sender, bool saveToHistory = true)
     {
         SearchString = null;
         lock (Menu.Lock)
         {
             Console.Clear();
         }
-
-        string cwd = Directory.GetCurrentDirectory();
-        if (saveToHistory && cwd != BookmarkDir)
+        
+        Cwd = Directory.GetCurrentDirectory();
+        if (saveToHistory && Cwd != BookmarkDir)
         {
-            DirHistory.Push(Path.GetFullPath(cwd));
+            DirHistory.Push(Path.GetFullPath(Cwd));
         }
         
-        Directory.SetCurrentDirectory(sender.Text);
+        Cwd = Path.GetFullPath(sender.Text);
+        Directory.SetCurrentDirectory(Cwd);
         FileWatcher?.Dispose();
         ParentWatcher?.Dispose();
         
-        FileWatcher = new(cwd);
+        FileWatcher = new(Cwd);
         FileWatcher.EnableRaisingEvents = true;
         FileWatcher.NotifyFilter = NotifyFilters.DirectoryName | NotifyFilters.FileName;
 
-        if (Directory.GetParent(cwd) != null)
+        if (Directory.GetParent(Cwd) != null)
         {
-            ParentWatcher = new(Directory.GetParent(cwd)?.FullName ?? "");
+            ParentWatcher = new(Directory.GetParent(Cwd)?.FullName ?? "");
             ParentWatcher.EnableRaisingEvents = true;
             ParentWatcher.NotifyFilter = NotifyFilters.DirectoryName;
             
-            string currentDir = cwd;
+            string currentDir = Cwd;
             ParentWatcher.Deleted += (obj, e) =>
             {
                 bool currDirExists;
@@ -436,7 +512,7 @@ public class MenuContext
         
         FileWatcher.Deleted += (obj, e) =>
         {
-            MenuItem item = Menu.GetItemByText(e.Name);
+            CmdListBoxItem<CmdLabel>? item = Menu.Items.FirstOrDefault(item => item.Item.Text == e.Name);
             if (item != null)
             {
                 Menu.RemoveItem(item);
@@ -447,10 +523,10 @@ public class MenuContext
 
         FileWatcher.Renamed += (obj, e) =>
         {
-            MenuItem? item = Menu.GetItems().FirstOrDefault(item => item.Text == e.OldName);
+            CmdListBoxItem<CmdLabel>? item = Menu.Items.FirstOrDefault(item => item.Item.Text == e.OldName);
             if (item != null)
             {
-                item.Text = e.Name ?? item.Text;
+                item.Item.Text = e.Name ?? item.Item.Text;
                 Menu.MenuUpdate.Invoke();
             }
         };
@@ -486,10 +562,9 @@ public class MenuContext
         }
     }
 
-    public string? Input(string inputText, string startValue = "", bool enterNull = false, bool escapeNo = false)
+    public string? Input(string inputText, string startValue = "", bool enterNull = false, bool escapeNo = false, bool inputHidden = false)
     {
         Listener.RaiseEvents = false;
-        Thread.Sleep(100);
 
         InputListener? keyListener = InputListener.New();
         if (keyListener == null)
@@ -513,7 +588,16 @@ public class MenuContext
             Console.Write("\x1b[2K");
             Console.SetCursorPosition(0, top);
 
-            Console.Write(inputText + builder);
+            Console.Write(inputText);
+            if (!inputHidden)
+            {
+                Console.Write(builder);
+            }
+            else
+            {
+                Console.Write(new string('*', builder.Length));
+            }
+            
             Console.SetCursorPosition(cursor + StripAnsi(inputText).Length, top);
         }
         
@@ -564,11 +648,9 @@ public class MenuContext
                     {
                         return;
                     }
-                    else
-                    {
-                        builder.Remove(cursor, 1);
-                        Redraw();
-                    }
+                    
+                    builder.Remove(cursor, 1);
+                    Redraw();
                     
                     return;
             }
@@ -601,10 +683,9 @@ public class MenuContext
         keyListener.OnKeyUp -= OnKeyUp;
         
         Listener.RaiseEvents = true;
-        Listener.ClearKeyState();
         
+        Listener.ClearKeyState();
         Listener.ConsumeNextKeyDown(Key.Enter);
-        Listener.ConsumeNextKeyUp(Key.Enter);
         
         Console.CursorVisible = false;
 
@@ -642,9 +723,12 @@ public class MenuContext
     
     public void SelectItem()
     {
-        MenuItem? item = Menu.GetItemAt(Menu.SelectedIndex);
-        if (item?.Text == "..") return;
-                    
+        CmdLabel? item = Menu.SelectedItem.Item;
+        if (item == null || item.Text == "..")
+        {
+            return;
+        }
+        
         if (!SelectedItems.Remove(item))
         {
             SelectedItems.Add(item);

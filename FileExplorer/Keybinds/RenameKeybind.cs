@@ -1,5 +1,6 @@
 using System.Text;
 using CmdMenu;
+using CmdMenu.Controls;
 
 namespace FileExplorer.Keybinds;
 
@@ -9,16 +10,16 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
     {
         lock (_context.Menu.Lock)
         {
-            MenuItem? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
-            if (item == null || item.Text == "..")
+            CmdListBoxItem<CmdLabel>? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
+            if (item == null || item.Item.Text == "..")
             {
                 return;
             }
             
             Console.CursorVisible = true;
-            string? name = _context.Input($"{Color.Reset.ToAnsi()} Rename to: ", _context.StripAnsi(item.Text))?.Trim();
+            string? name = _context.Input($"{Color.Reset.ToAnsi()} Rename to: ", _context.StripAnsi(item.Item.Text))?.Trim();
             
-            if (name == null || name == _context.StripAnsi(item.Text))
+            if (name == null || name == _context.StripAnsi(item.Item.Text))
             {
                 Console.CursorVisible = false;
                 Console.Clear();
@@ -32,7 +33,7 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
             if (Encoding.Latin1.GetByteCount(name) != name.Length ||
                 name?.ToCharArray().Any(c => invalidNameChars.Contains(c)) == true ||
                 _context.Menu.GetItemsClone()
-                        .Select(item => item.Text)
+                        .Select(item => item.Item.Text)
                         .Contains(name) || name == "..")
             {
                 Console.CursorVisible = false;
@@ -61,9 +62,9 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
             
             try
             {
-                if (Directory.Exists(item?.Text))
+                if (Directory.Exists(item?.Item.Text))
                 {
-                    Directory.Move(item.Text, name);
+                    Directory.Move(item.Item.Text, name);
                     
                     List<string> dirHistoryList = _context.DirHistory.ToList();
                     _context.DirHistory.Clear();
@@ -71,7 +72,7 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
                     for (int i = dirHistoryList.Count - 1; i >= 0; i--)
                     {
                         string dirPath = dirHistoryList[i];
-                        if (dirPath == Path.GetFullPath(item.Text))
+                        if (dirPath == Path.GetFullPath(item.Item.Text))
                         {
                             dirPath = Path.GetFullPath(name);
                         }
@@ -79,12 +80,12 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
                         _context.DirHistory.Push(dirPath);
                     }
                 }
-                else if (File.Exists(item?.Text))
+                else if (File.Exists(item?.Item.Text))
                 {
-                    File.Move(item.Text, name);
+                    File.Move(item.Item.Text, name);
                 }
                 
-                item.Text = name;
+                item.Item.Text = name;
             }
             catch { }
             

@@ -1,17 +1,20 @@
 using System.Diagnostics;
 using CmdMenu;
+using CmdMenu.Controls;
+using InputLib;
 
 namespace FileExplorer.FileTypes;
 
 public class TextFile
 {
-    public static void OnClick(MenuContext context, MenuItem sender)
+    public static void OnClick(MenuContext context, CmdLabel sender)
     {
         if (!OperatingSystem.IsLinux())
         {
             return;
         }
         
+        context.Listener.ConsumeNextKeyUp(Key.LeftCtrl);
         context.Listener.RaiseEvents = false;
         
         int lines = Console.WindowHeight;
@@ -27,18 +30,21 @@ public class TextFile
                 UseShellExecute = false,
             },
         };
-
+        
+        proc.Start();
+        
         lock (context.Menu.Lock)
         {
-            proc.Start();
             proc.WaitForExit();
-
-            Console.CursorVisible = false;
-            Console.Clear();
-            Console.WriteLine($"\x1b[8;{lines};{columns}t");
-            context.RedrawMenu();
         }
 
+        lock (context.OutLock)
+        {
+            Console.CursorVisible = false;
+            Console.WriteLine($"\x1b[8;{lines};{columns}t");
+        }
+        
         context.Listener.RaiseEvents = true;
+        context.RedrawMenu();
     }
 }

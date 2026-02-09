@@ -2,7 +2,7 @@ using InputLib;
 
 namespace FileExplorer.Keybinds;
 
-public class ExitKeybind(MenuContext context, InputListener listener) : Keybind(context)
+public class ExitKeybind(MenuContext context) : Keybind(context)
 {
     public override void OnKeyUp()
     {
@@ -12,10 +12,10 @@ public class ExitKeybind(MenuContext context, InputListener listener) : Keybind(
             Console.Clear();
             
             InputListener.EnableEcho();
-            listener.Dispose();
-            listener.WaitForDispose();
+            _context.Listener.Dispose();
+            _context.Listener.WaitForDispose();
             
-            context.ExitEvent.Set();
+            _context.ExitEvent.Set();
         }
     }
 }

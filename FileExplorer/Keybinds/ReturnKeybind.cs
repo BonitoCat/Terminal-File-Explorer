@@ -23,7 +23,7 @@ public class ReturnKeybind(MenuContext context) : Keybind(context)
         }
         else
         {
-            _context.Menu.GetItems().FirstOrDefault(item => item.Text == "..")?.CallOnClick();
+            _context.Menu.Items.FirstOrDefault(item => item.Item.Text == "..")?.CallOnClick();
         }
         
         _context.RedrawMenu();

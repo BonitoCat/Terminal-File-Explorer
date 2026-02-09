@@ -1,11 +1,12 @@
 using System.Diagnostics;
 using CmdMenu;
+using CmdMenu.Controls;
 
 namespace FileExplorer.FileTypes;
 
 public static class DebFile
 {
-    public static void OnClick(MenuContext context, MenuItem sender)
+    public static void OnClick(MenuContext context, CmdLabel sender)
     {
         Process proc = new()
         {

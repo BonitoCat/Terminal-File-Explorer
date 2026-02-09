@@ -1,4 +1,5 @@
 using CmdMenu;
+using CmdMenu.Controls;
 using InputLib.EventArgs;
 
 namespace FileExplorer.Keybinds;
@@ -16,13 +17,13 @@ public class DuplicateKeybind(MenuContext context) : Keybind(context)
             }
             else
             {
-                MenuItem? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
-                if (item?.Text == "..")
+                CmdListBoxItem<CmdLabel>? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
+                if (item?.Item.Text == "..")
                 {
                     return;
                 }
                     
-                dupeItems.Add(Path.GetFullPath(item.Text));
+                dupeItems.Add(Path.GetFullPath(item.Item.Text));
             }
 
             foreach (string itemPath in dupeItems)

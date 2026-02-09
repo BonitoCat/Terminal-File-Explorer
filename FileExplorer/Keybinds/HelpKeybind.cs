@@ -2,7 +2,7 @@ using InputLib;
 
 namespace FileExplorer.Keybinds;
 
-public class HelpKeybind(MenuContext context, InputListener listener, string helpString) : Keybind(context)
+public class HelpKeybind(MenuContext context, string helpString) : Keybind(context)
 {
     public override void OnKeyUp()
     {
@@ -12,7 +12,7 @@ public class HelpKeybind(MenuContext context, InputListener listener, string hel
             Console.WriteLine(helpString);
             Thread.Sleep(500);
             
-            listener.WaitForKeyInput(Key.Escape);
+            _context.Listener.WaitForKeyInput(Key.Escape);
             Console.Clear();
             Thread.Sleep(50);
             

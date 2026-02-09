@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using CmdMenu;
+using CmdMenu.Controls;
 
 namespace FileExplorer.FileTypes;
 
@@ -7,7 +8,7 @@ public static class ImageFile
 {
     public static readonly string[] ImageExtensions = [".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"];
     
-    public static void OnClick(MenuContext context, MenuItem sender)
+    public static void OnClick(MenuContext context, CmdLabel sender)
     {
         Process proc = new()
         {

@@ -1,4 +1,5 @@
 using CmdMenu;
+using CmdMenu.Controls;
 
 namespace FileExplorer.FileTypes;
 
@@ -11,7 +12,7 @@ public static class VideoFile
         ".rm", ".rv", ".vob", ".mxf", ".swf", ".drc", ".gif",
     ];
     
-    public static void OnClick(MenuContext context, MenuItem sender)
+    public static void OnClick(MenuContext context, CmdLabel sender)
     {
         ImageFile.OnClick(context, sender);
     }

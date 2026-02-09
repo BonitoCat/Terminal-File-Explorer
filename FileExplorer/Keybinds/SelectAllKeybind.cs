@@ -1,4 +1,5 @@
 using CmdMenu;
+using CmdMenu.Controls;
 
 namespace FileExplorer.Keybinds;
 
@@ -6,16 +7,16 @@ public class SelectAllKeybind(MenuContext context) : Keybind(context)
 {
     public override void OnKeyUp()
     {
-        foreach (MenuItem item in _context.Menu.GetItems())
+        foreach (CmdListBoxItem<CmdLabel> item in _context.Menu.Items)
         {
-            if (item.Text == "..")
+            if (item.Item.Text == "..")
             {
                 continue;
             }
                         
-            if (!_context.SelectedItems.Contains(item))
+            if (!_context.SelectedItems.Contains(item.Item))
             {
-                _context.SelectedItems.Add(item);
+                _context.SelectedItems.Add(item.Item);
             }
         }
         

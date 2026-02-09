@@ -19,6 +19,8 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
     private void OpenCommandLine()
     {
         _context.Listener.PauseListening = true;
+        _context.DisableDrawing();
+        
         InputListener.EnableEcho();
         Console.CursorVisible = true;
 
@@ -52,7 +54,8 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
         
         InputListener.DisableEcho();
         _context.Listener.PauseListening = false;
-
+        _context.EnableDrawing();
+        
         _context.Listener.ConsumeNextKeyDown(Key.D);
     }
 }

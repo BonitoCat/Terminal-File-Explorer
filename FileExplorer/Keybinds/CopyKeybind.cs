@@ -1,7 +1,4 @@
-using System.IO.MemoryMappedFiles;
-using System.Net.Sockets;
-using System.Text;
-using CmdMenu;
+using CmdMenu.Controls;
 
 namespace FileExplorer.Keybinds;
 
@@ -21,8 +18,8 @@ public class CopyKeybind(MenuContext context) : Keybind(context)
             }
             else
             {
-                MenuItem? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
-                if (item == null || item.Text == "..")
+                CmdListBoxItem<CmdLabel>? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
+                if (item == null || item.Item.Text == "..")
                 {
                     return;
                 }

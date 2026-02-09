@@ -1,7 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Text;
-using System.Text.RegularExpressions;
 using CmdMenu;
+using CmdMenu.Controls;
 using FileExplorer.Keybinds;
 using FileLib;
 using InputLib;
@@ -26,7 +26,7 @@ class Program
            Navigation:
            | Up- / Down Arrow - Navigate items
            | Shift + Up / Down Arrow - Navigate items quickly
-           | (WIP) Ctrl + Left- / -Right Arrow - Navigate between menus
+           | F6 / Ctrl + Left- / -Right Arrow - Navigate between menus
            | Enter / Arrow Right - Open selected directory / file
            | Ctrl + Enter / -Arrow Right - Open selected file in nano
            | Escape / Alt + Up- / Left Arrow - Go up one directory
@@ -40,13 +40,13 @@ class Program
            
            Editing:
            | F2 - Rename selected item
-           | Shift + F4 - Add / remove current folder in bookmarks
            | Delete - Move item to recycle bin
            | Shift + Delete - Permanently delete item
            | Space - Select item
            | Shift + Space - Select a region of items
            | Ctrl + A - Select all directories and files
            | Shift + A - Deselect all directories and files
+           | Ctrl + B - Add / remove current folder in bookmarks
            | Ctrl + C - Copy item
            | Ctrl + X - Cut item
            | Ctrl + V - Paste item
@@ -55,22 +55,22 @@ class Program
            | Shift + D - Duplicate directory / file
            
            Misc:
-           | (WIP) F3 - Open / close second menu
+           | F3 - Open / close second menu
            | F5 | Ctrl + R - Reload menu
            | Ctrl + F - Search in current directory
            | Ctrl + H - Toggle visibility of hidden files / directories
            | Ctrl + J - Toggle visibility of file sizes
-           | Ctrl + O - Open current directory in file explorer
+           | Ctrl + O - Open current directory in OS file explorer
            | Shift + C - Copy current directory path to clipboard
            | F1 - Show this menu
            | F10 - Close file explorer (Also see Ctrl + D)
  
          """;
 
-    private static MenuContext _context = new()
-    {
-        Menu = new(),
-    };
+    private static object _outLock = new();
+    private static List<MenuContext> _contexts = [];
+    private static int _selectedContextIndex = 0;
+    private static MenuContext? _selectedContext => _selectedContextIndex >= _contexts.Count ? null : _contexts[_selectedContextIndex];
     
     private static List<Keybind> _keybinds = new();
     private static string[] _fileSizes = ["B", "kiB", "MiB", "GiB"];
@@ -112,43 +112,36 @@ class Program
             }
         }
 
-        _context.BookmarkDir = Path.Combine(DirectoryHelper.GetAppDataDirPath(), "fe", "Bookmarks");
-        DirectoryHelper.CreateDir(_context.BookmarkDir);
         InputListener.Init();
-
+        InputListener.DisableEcho();
+        
+        _contexts.Add(CreateMenuContext());
+        UpdateContexts();
+        SwitchContext(0);
+        
         Console.OutputEncoding = Encoding.UTF8;
         Console.TreatControlCAsInput = true;
         Console.CursorVisible = false;
         Console.Clear();
 
-        _context.OnClickDir(new(Directory.GetCurrentDirectory()), false);
+        WindowManager.Instance.MainWindow.Title = "Terminal File-Explorer";
+        WindowManager.Instance.MainWindow.OnWindowResize += OnResize;
         
-        InputListener.DisableEcho();
-        _context.Listener = InputListener.New();
-        
-        if (_context.Listener == null)
+        if (_selectedContext.Listener == null)
         {
             Console.WriteLine("Could not load input listener");
             return;
         }
         
-        _context.Listener.ClearKeyState();
-        _context.Listener.ConsumeNextKeyDown(Key.Enter);
-        _context.Listener.ConsumeNextKeyUp(Key.Enter);
-        
-        MapKeybinds(_context.Listener);
-
-        _context.Listener.RepeatRateMs = 30;
-        _context.Listener.StartListening();
-        
-        _context.Listener.OnKeyDown += (key, e) => HandleKeyDown(_context.Listener, key, e);
-        _context.Listener.OnKeyUp += key => HandleKeyUp(_context.Listener, key);
+        _selectedContext.Listener.ClearKeyState();
+        _selectedContext.Listener.ConsumeNextKeyDown(Key.Enter);
+        _selectedContext.Listener.ConsumeNextKeyUp(Key.Enter);
 
         Task.Run(() =>
         {
             int consoleWidth = Console.WindowWidth;
             int consoleHeight = Console.WindowHeight;
-            while (!_context.ExitEvent.IsSet)
+            while (!_selectedContext.ExitEvent.IsSet)
             {
                 if (consoleWidth != Console.WindowWidth || consoleHeight != Console.WindowHeight)
                 {
@@ -159,233 +152,293 @@ class Program
                 }
             }
         });
-        
-        _context.Menu.MenuUpdate += () =>
-        {
-            /*if (_context.IsDrawing)
-            {
-                return;
-            }*/
 
-            if (_context.CommandLine != null)
-            {
-                return;
-            }
-
-            DrawMenu();
-        };
-
-        _context.RedrawMenu();
-        /*while (!_context.ExitEvent.IsSet)
-        {
-            if (_context.RedrawRequested)
-            {
-                DrawMenu();
-                _context.RedrawRequested = false;
-            }
-
-            Thread.Sleep(1);
-        }*/
-        _context.ExitEvent.Wait();
+        _selectedContext.RedrawMenu();
+        _selectedContext.ExitEvent.Wait();
     }
 
-    private static void DrawMenu()
+    private static void DrawMenu(MenuContext context)
     {
-        //_context.IsDrawing = true;
-        lock (_context.OutLock)
+        lock (_outLock)
+        lock (context.OutLock)
         {
-            Console.SetCursorPosition(0, 0);
+            Console.SetCursorPosition(context.Menu.X, context.Menu.Y);
             Console.Write("\x1b[?7l");
             
-            if (_context.Menu.GetItemCount() == 0)
+            if (context.Menu.GetItemCount() == 0)
             {
                 Console.Clear();
-                Console.WriteLine($"\x1b[?7l\x1b[2K{Color.Reset.ToAnsi()} File-Explorer ({Directory.GetCurrentDirectory()})");
+                Console.WriteLine($"\x1b[?7l{Color.Reset.ToAnsi()} File-Explorer ({Directory.GetCurrentDirectory()})");
                 Console.WriteLine("\x1b[?7h");
                 
-                //_context.IsDrawing = false;
                 return;
             }
         }
         
-        int consoleWidth = Console.WindowWidth;
-        int consoleHeight = Console.WindowHeight;
-
         int longestLine;
         try
         {
-            longestLine = _context.Menu
-                                  .GetItems()
-                                  .Where(item => item.Data.TryGetValue("ItemType", out string? type) && type == "File")
-                                  .Max(item => _context.StripAnsi(item.Prefix).Length + _context.StripAnsi(item.Text).Length + _context.StripAnsi(item.Suffix).Length);
+            longestLine = context.Menu
+                                 .Items
+                                 .Where(item => item.Data.TryGetValue("ItemType", out string? type) && type == "File")
+                                 .Max(item => item.Item.Length);
         }
         catch (InvalidOperationException)
         {
             longestLine = -1;
         }
-        
-        StringBuilder builder = new();
-        string currentDir = Directory.GetCurrentDirectory() == _context.BookmarkDir ? "Bookmarks" : Directory.GetCurrentDirectory();
-        builder.AppendLine($"\x1b[?7l\x1b[2K{Color.Reset.ToAnsi()} File-Explorer ({currentDir})");
-        _context.Menu
-                .GetViewItems()
-                .ForEach(item =>
-                {
-                    int i = _context.Menu.IndexOf(item);
-                    
-                    builder.Append("\x1b[2K");
-                    builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
-                    builder.Append(i == _context.Menu.SelectedIndex ? " > " : "   ");
 
-                    bool hasFullPath = item.Data.TryGetValue("FullPath", out string? path);
-                    bool hasDefaultColor = item.Data.TryGetValue("DefaultColor", out string? defaultColor);
-                    bool hasCutColor = item.Data.TryGetValue("CutColor", out string? cutColor);
-                    if (hasFullPath && hasDefaultColor && hasCutColor)
-                    {
-                        string ansiColor = _context.MoveItems.Contains(path) && _context.MoveStyle == MoveStyle.Cut ? cutColor : defaultColor;
-                        item.ForegroundColor = Color.FromRgbString(ansiColor);
-                    }
-
-                    if (_context.SelectedItems.Contains(item))
-                    {
-                        builder.Append(item.Prefix);
-                        builder.Append(Color.White.ToAnsi(Color.AnsiType.Background));
-                        builder.Append(Color.Black.ToAnsi());
-                        builder.Append(item.Text);
-                        builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
-                        builder.Append(item.Suffix);
-                    }
-                    else
-                    {
-                        builder.Append(_context.Menu.GetItemAt(i));
-                    }
-
-                    if (_context.ShowFileSizes && longestLine != -1 && item.Data.TryGetValue("InfoSize", out string? size))
-                    {
-                        if (long.TryParse(size, out long sizeLong))
-                        {
-                            double sizeCalc = sizeLong;
-                            int sizeType = 0;
-                            while (sizeCalc >= 1024 && sizeType < _fileSizes.Length)
-                            {
-                                sizeCalc /= 1024f;
-                                sizeType++;
-                            }
-                            
-                            int sizePos = longestLine - _context.StripAnsi(item.Text).Length - _context.StripAnsi(item.Suffix).Length + 5;
-                            builder.Append(i == _context.Menu.SelectedIndex ? Color.White.ToAnsi() : Color.LightGray.ToAnsi());
-                            builder.Append(new string(' ', sizePos) + $"{sizeCalc.ToString("F1")} {_fileSizes[sizeType]}");
-                        }
-                    }
-                    
-                    builder.AppendLine();
-                });
         
-        _context.Menu.ViewRange = Math.Max(consoleHeight - 6, 0);
-        if (_context.Menu.ViewIndex + _context.Menu.ViewRange < _context.Menu.GetItemCount())
+        string cwd = context.Cwd == context.BookmarkDir ? "Bookmarks" : context.Cwd;
+        Console.WriteLine($"\x1b[?7l{Color.Reset.ToAnsi()} File-Explorer ({cwd})");
+        
+        lock (_outLock)
+        lock (context.OutLock)
         {
-            builder.AppendLine($"\x1b[2K\n\x1b[2K{Color.Reset.ToAnsi()}   --MORE--");
-        }
-        else
-        {
-            builder.Append("\x1b[2K\n\x1b[2K");
-        }
+            int dy = 1;
+        context.Menu
+               .GetViewItems()
+               .ForEach(item =>
+               {
+                   int i = context.Menu.IndexOf(item);
+                   
+                   StringBuilder builder = new();
+                   builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
+                   builder.Append(i == context.Menu.SelectedIndex ? " > " : "   ");
 
-        builder.Append("\x1b[?7h");
-        
-        lock (_context.OutLock)
-        {
-            Console.SetCursorPosition(0, 0);
-            Console.WriteLine(builder);
-        }
-        
-        Thread.Sleep(10);
-        if (Console.WindowHeight != consoleHeight || Console.WindowWidth != consoleWidth)
-        {
-            if (Console.WindowHeight >= _context.Menu.ViewIndex + _context.Menu.ViewRange - 1)
+                   bool hasFullPath = item.Data.TryGetValue("FullPath", out string? path);
+                   bool hasDefaultColor = item.Data.TryGetValue("DefaultColor", out string? defaultColor);
+                   bool hasCutColor = item.Data.TryGetValue("CutColor", out string? cutColor);
+                   if (hasFullPath && hasDefaultColor && hasCutColor)
+                   {
+                       string ansiColor = (context != _selectedContext) || (context.MoveItems.Contains(path) && context.MoveStyle == MoveStyle.Cut) ? cutColor : defaultColor;
+                       item.Item.Style.Foreground = Color.FromRgbString(ansiColor);
+                   }
+
+                   if (context.SelectedItems.Contains(item.Item))
+                   {
+                       builder.Append(item.Item.Prefix);
+                       builder.Append(Color.White.ToAnsi(Color.AnsiType.Background));
+                       builder.Append(Color.Black.ToAnsi());
+                       builder.Append(item.Item.Text);
+                       builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
+                       builder.Append(item.Item.Suffix);
+                   }
+                   else
+                   {
+                       builder.Append(context.Menu.GetItemAt(i).Item);
+                   }
+
+                   if (context.ShowFileSizes && longestLine != -1 && item.Data.TryGetValue("InfoSize", out string? size))
+                   {
+                       if (long.TryParse(size, out long sizeLong))
+                       {
+                           double sizeCalc = sizeLong;
+                           int sizeType = 0;
+                           while (sizeCalc >= 1024 && sizeType < _fileSizes.Length)
+                           {
+                               sizeCalc /= 1024f;
+                               sizeType++;
+                           }
+                           
+                           int sizePos = longestLine - item.Item.TextLength - item.Item.SuffixLength + 5;
+                           builder.Append(i == context.Menu.SelectedIndex ? Color.White.ToAnsi() : Color.LightGray.ToAnsi());
+                           builder.Append(new string(' ', sizePos) + $"{sizeCalc.ToString("F1")} {_fileSizes[sizeType]}");
+                       }
+                   }
+                   
+                   builder.Append(new string(' ',
+                       Math.Max(context.Menu.MaxWidth - Color.TrimAnsi(builder.ToString()).Length, 0)));
+                   
+                   lock (_outLock)
+                   lock (context.OutLock)
+                   {
+                       Console.SetCursorPosition(context.Menu.X, context.Menu.Y + dy);
+                       Console.Write(builder);
+                       dy++;
+                   }
+               });
+            
+            if (context.Menu.ViewIndex + context.Menu.ViewRange < context.Menu.GetItemCount())
             {
-                _context.Menu.ViewIndex = 0;
+                Console.SetCursorPosition(context.Menu.X, context.Menu.Y + dy + 1);
+                string moreText = $"{Color.Reset.ToAnsi()}   --MORE--";
+                Console.Write(moreText + new string(' ', Math.Max(context.Menu.MaxWidth - Color.TrimAnsi(moreText).Length, 0)));
             }
-
-            lock (_context.OutLock)
+            else
             {
-                Console.Clear();
+                Console.SetCursorPosition(context.Menu.X, context.Menu.Y + dy + 1);
+                Console.Write(new string(' ', Math.Max(context.Menu.MaxWidth, 0)));
             }
+            
+            Console.WriteLine("\x1b[?7h");
         }
-        
-        //_context.IsDrawing = false;
     }
     
     private static void OnResize()
     {
-        lock (_context.OutLock)
+        UpdateContexts();
+        lock (_outLock)
         {
             Console.Clear();
         }
         
-        _context.RedrawMenu();
+        foreach (MenuContext context in _contexts)
+        {
+            context.Menu.ViewRange = Math.Max(WindowManager.Instance.MainWindow.Height - 6, 0);
+            if (Console.WindowHeight >= context.Menu.ViewIndex + context.Menu.ViewRange - 1)
+            {
+                context.Menu.ViewIndex = 0;
+            }
+            
+            context.RedrawMenu();
+        }
     }
-    
-    private static void MapKeybinds(InputListener listener)
+
+    private static MenuContext CreateMenuContext()
+    {
+        MenuContext context = new()
+        {
+            Menu = new(),
+        };
+        
+        context.Listener = InputListener.New();
+        context.Listener.RaiseEvents = false;
+        
+        context.OnClickDir(new CmdLabel(Directory.GetCurrentDirectory()), false);
+        
+        context.BookmarkDir = Path.Combine(DirectoryHelper.GetAppDataDirPath(), "fe", "Bookmarks");
+        DirectoryHelper.CreateDir(context.BookmarkDir);
+        
+        //MapKeybinds(context);
+
+        context.Listener.RepeatRateMs = 30;
+        context.Listener.StartListening();
+        
+        context.Listener.OnKeyDown += (key, e) => HandleKeyDown(context.Listener, key, e);
+        context.Listener.OnKeyUp += key => HandleKeyUp(context.Listener, key);
+        
+        context.Menu.MenuUpdate += () =>
+        {
+            foreach (MenuContext context in _contexts.OrderBy(context => context.Menu.ZIndex))
+            {
+                if (context.CommandLine != null)
+                {
+                    return;
+                }
+
+                DrawMenu(context);
+            }
+        };
+
+        return context;
+    }
+
+    private static void UpdateContexts()
+    {
+        for (int i = 0; i < _contexts.Count; i++)
+        {
+            _contexts[i].Menu.MaxWidth = Console.WindowWidth / _contexts.Count;
+            _contexts[i].Menu.MaxHeight = Math.Max(Console.WindowHeight - 6, 0);
+            _contexts[i].Menu.X = Console.WindowWidth / _contexts.Count * i;
+            _contexts[i].Menu.ZIndex = i;
+        }
+    }
+
+    private static void SwitchContext(int dir)
+    {
+        _contexts.ForEach(context => context.Listener.RaiseEvents = false);
+        _selectedContextIndex = Math.Clamp(_selectedContextIndex + dir, 0, _contexts.Count - 1);
+        MapKeybinds(_selectedContext);
+        _selectedContext.Listener.RaiseEvents = true;
+
+        Directory.SetCurrentDirectory(_selectedContext.Cwd);
+        
+        Console.Clear();
+        _contexts.ForEach(DrawMenu);
+    }
+
+    private static void MapKeybinds(MenuContext context)
     {
         _keybinds.Clear();
         
-        _keybinds.Add(new NavUpKeybind(_context) { Keys = [Key.ArrowUp] });
-        _keybinds.Add(new NavDownKeybind(_context) { Keys = [Key.ArrowDown] });
+        _keybinds.Add(new NavUpKeybind(context) { Keys = [Key.ArrowUp] });
+        _keybinds.Add(new NavDownKeybind(context) { Keys = [Key.ArrowDown] });
         
-        _keybinds.Add(new ClickKeybind(_context) { Keys = [Key.Enter] });
-        _keybinds.Add(new ClickKeybind(_context) { Keys = [Key.ArrowRight] });
-        _keybinds.Add(new CtrlClickKeybind(_context) { Keys = [Key.LeftCtrl, Key.Enter] });
-        _keybinds.Add(new CtrlClickKeybind(_context) { Keys = [Key.ArrowRight, Key.Enter] });
+        _keybinds.Add(new ClickKeybind(context) { Keys = [Key.Enter] });
+        _keybinds.Add(new ClickKeybind(context) { Keys = [Key.ArrowRight] });
+        _keybinds.Add(new CtrlClickKeybind(context) { Keys = [Key.LeftCtrl, Key.Enter] });
         
-        _keybinds.Add(new ReturnKeybind(_context) { Keys = [Key.Escape] });
-        _keybinds.Add(new ReturnKeybind(_context) { Keys = [Key.Alt, Key.ArrowUp] });
-        _keybinds.Add(new ReturnKeybind(_context) { Keys = [Key.ArrowLeft] });
+        _keybinds.Add(new ReturnKeybind(context) { Keys = [Key.Escape] });
+        _keybinds.Add(new ReturnKeybind(context) { Keys = [Key.Alt, Key.ArrowUp] });
+        _keybinds.Add(new ReturnKeybind(context) { Keys = [Key.ArrowLeft] });
         
-        _keybinds.Add(new SelectKeybind(_context) { Keys = [Key.Space] });
-        _keybinds.Add(new MultiSelectKeybind(_context) { Keys = [Key.LeftShift, Key.Space] });
-        _keybinds.Add(new SelectAllKeybind(_context) { Keys = [Key.LeftCtrl, Key.A] });
-        _keybinds.Add(new DeselectAllKeybind(_context) { Keys = [Key.LeftShift, Key.A] });
+        _keybinds.Add(new SelectKeybind(context) { Keys = [Key.Space] });
+        _keybinds.Add(new MultiSelectKeybind(context) { Keys = [Key.LeftShift, Key.Space] });
+        _keybinds.Add(new SelectAllKeybind(context) { Keys = [Key.LeftCtrl, Key.A] });
+        _keybinds.Add(new DeselectAllKeybind(context) { Keys = [Key.LeftShift, Key.A] });
         
-        _keybinds.Add(new CmdKeybind(_context) { Keys = [Key.LeftCtrl, Key.D] });
-        _keybinds.Add(new NemoKeybind(_context) { Keys = [Key.LeftCtrl, Key.O] });
+        _keybinds.Add(new CmdKeybind(context) { Keys = [Key.LeftCtrl, Key.D] });
+        _keybinds.Add(new NemoKeybind(context) { Keys = [Key.LeftCtrl, Key.O] });
         
-        _keybinds.Add(new DirHistoryKeybind(_context) { Keys = [Key.Alt, Key.ArrowLeft] });
+        _keybinds.Add(new DirHistoryKeybind(context) { Keys = [Key.Alt, Key.ArrowLeft] });
         
-        _keybinds.Add(new JumpStartKeybind(_context) { Keys = [Key.LeftCtrl, Key.ArrowUp] });
-        _keybinds.Add(new JumpStartKeybind(_context) { Keys = [Key.Home] });
+        _keybinds.Add(new JumpStartKeybind(context) { Keys = [Key.LeftCtrl, Key.ArrowUp] });
+        _keybinds.Add(new JumpStartKeybind(context) { Keys = [Key.Home] });
         
-        _keybinds.Add(new JumpEndKeybind(_context) { Keys = [Key.LeftCtrl, Key.ArrowDown] });
-        _keybinds.Add(new JumpEndKeybind(_context) { Keys = [Key.End] });
+        _keybinds.Add(new JumpEndKeybind(context) { Keys = [Key.LeftCtrl, Key.ArrowDown] });
+        _keybinds.Add(new JumpEndKeybind(context) { Keys = [Key.End] });
         
-        _keybinds.Add(new ReloadKeybind(_context) { Keys = [Key.LeftCtrl, Key.R] });
-        _keybinds.Add(new ReloadKeybind(_context) { Keys = [Key.F5] });
+        _keybinds.Add(new ReloadKeybind(context) { Keys = [Key.LeftCtrl, Key.R] });
+        _keybinds.Add(new ReloadKeybind(context) { Keys = [Key.F5] });
         
-        _keybinds.Add(new HideKeybind(_context) { Keys = [Key.LeftCtrl, Key.H] });
-        _keybinds.Add(new SearchKeybind(_context) { Keys = [Key.LeftCtrl, Key.F] });
+        _keybinds.Add(new HideKeybind(context) { Keys = [Key.LeftCtrl, Key.H] });
+        _keybinds.Add(new SearchKeybind(context) { Keys = [Key.LeftCtrl, Key.F] });
         
-        _keybinds.Add(new NewFolderKeybind(_context) { Keys = [Key.LeftShift, Key.N] });
-        _keybinds.Add(new NewFileKeybind(_context) { Keys = [Key.LeftCtrl, Key.N] });
+        _keybinds.Add(new NewFolderKeybind(context) { Keys = [Key.LeftShift, Key.N] });
+        _keybinds.Add(new NewFileKeybind(context) { Keys = [Key.LeftCtrl, Key.N] });
         
-        _keybinds.Add(new DirPathKeybind(_context) { Keys = [Key.LeftCtrl, Key.W] });
+        _keybinds.Add(new DirPathKeybind(context) { Keys = [Key.LeftCtrl, Key.W] });
         
-        _keybinds.Add(new CopyKeybind(_context) { Keys = [Key.LeftCtrl, Key.C] });
-        _keybinds.Add(new CutKeybind(_context) { Keys = [Key.LeftCtrl, Key.X] });
-        _keybinds.Add(new PasteKeybind(_context) { Keys = [Key.LeftCtrl, Key.V] });
-        _keybinds.Add(new DuplicateKeybind(_context) { Keys = [Key.LeftShift, Key.D] });
+        _keybinds.Add(new CopyKeybind(context) { Keys = [Key.LeftCtrl, Key.C] });
+        _keybinds.Add(new CutKeybind(context) { Keys = [Key.LeftCtrl, Key.X] });
+        _keybinds.Add(new PasteKeybind(context) { Keys = [Key.LeftCtrl, Key.V] });
+        _keybinds.Add(new DuplicateKeybind(context) { Keys = [Key.LeftShift, Key.D] });
         
-        _keybinds.Add(new DeleteKeybind(_context) { Keys = [Key.Delete] });
-        _keybinds.Add(new DeletePermKeybind(_context) { Keys = [Key.LeftShift, Key.Delete] });
+        _keybinds.Add(new DeleteKeybind(context) { Keys = [Key.Delete] });
+        _keybinds.Add(new DeletePermKeybind(context) { Keys = [Key.LeftShift, Key.Delete] });
 
-        _keybinds.Add(new SizeKeybind(_context) {Keys = [Key.LeftCtrl, Key.J] });
-        _keybinds.Add(new CopyPathKeybind(_context) {Keys = [Key.LeftShift, Key.C]});
+        _keybinds.Add(new SizeKeybind(context) {Keys = [Key.LeftCtrl, Key.J] });
+        _keybinds.Add(new CopyPathKeybind(context) {Keys = [Key.LeftShift, Key.C]});
         
-        _keybinds.Add(new BookmarkMenuKeybind(_context) {Keys = [Key.F4]});
-        _keybinds.Add(new AddBookmarkKeybind(_context) {Keys = [Key.LeftCtrl, Key.B]});
+        _keybinds.Add(new BookmarkMenuKeybind(context) {Keys = [Key.F4]});
+        _keybinds.Add(new AddBookmarkKeybind(context) {Keys = [Key.LeftCtrl, Key.B]});
         
-        _keybinds.Add(new HelpKeybind(_context, listener, _helpStr) { Keys = [Key.F1] });
-        _keybinds.Add(new RenameKeybind(_context) { Keys = [Key.F2] });
-        _keybinds.Add(new ExitKeybind(_context, listener) { Keys = [Key.F10] });
+        _keybinds.Add(new HelpKeybind(context, _helpStr) { Keys = [Key.F1] });
+        _keybinds.Add(new RenameKeybind(context) { Keys = [Key.F2] });
+        _keybinds.Add(new ExitKeybind(context) { Keys = [Key.F10] });
+        
+        _keybinds.Add(new CreateMenuKeybind(context, () =>
+        {
+            if (_contexts.Count == 1)
+            {
+                _contexts.Add(CreateMenuContext());
+            }
+            else if (_contexts.Count == 2)
+            {
+                _contexts.RemoveAll(context => context != _selectedContext);
+                _selectedContextIndex = 0;
+            }
+            
+            UpdateContexts();
+            
+            Console.Clear();
+            _contexts.ForEach(DrawMenu);
+        }) { Keys = [Key.F3] });
+        
+        _keybinds.Add(new SwitchMenuKeybind(context, -1, SwitchContext) { Keys = [Key.LeftCtrl, Key.ArrowLeft] });
+        _keybinds.Add(new SwitchMenuKeybind(context, 1, SwitchContext) { Keys = [Key.LeftCtrl, Key.ArrowRight] });
+        _keybinds.Add(new SwitchMenuKeybind(context, _selectedContextIndex == 0 ? 1 : -1, SwitchContext) { Keys = [Key.F6] });
     }
 
     private static void HandleKeyDown(InputListener listener, Key key, KeyDownEventArgs e)

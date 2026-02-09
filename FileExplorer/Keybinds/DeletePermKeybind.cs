@@ -1,4 +1,5 @@
 using CmdMenu;
+using CmdMenu.Controls;
 
 namespace FileExplorer.Keybinds;
 
@@ -8,7 +9,7 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
     {
         lock (_context.Menu.Lock)
         {
-            List<MenuItem> items = [];
+            List<CmdLabel> items = [];
             Console.CursorVisible = true;
             if (_context.SelectedItems.Count > 1)
             {
@@ -37,26 +38,26 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
             }
             else
             {
-                MenuItem? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
+                CmdListBoxItem<CmdLabel>? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
                 if (_context.SelectedItems.Count == 1)
                 {
-                    item = _context.SelectedItems[0];
+                    item.Item = _context.SelectedItems[0];
                 }
 
-                if (item?.Text == "..")
+                if (item?.Item.Text == "..")
                 {
                     Console.CursorVisible = false;
                     return;
                 }
 
-                items.Add(item);
+                items.Add(item.Item);
                 lock (_context.OutLock)
                 {
                     string? input;
                     do
                     {
                         input = _context.Input(
-                                $"\x1b[2K{Color.Reset.ToAnsi()} Are you sure you want to permanently delete '{item.Text}'? [Y/n]: ",
+                                $"\x1b[2K{Color.Reset.ToAnsi()} Are you sure you want to permanently delete '{item.Item.Text}'? [Y/n]: ",
                                 enterNull: true,
                                 escapeNo: true
                             )?.Trim().ToLower();

@@ -16,12 +16,13 @@ class Program
          
           Command:
            {Process.GetCurrentProcess().ProcessName} [List of arguments]
- 
+          
           Arguments:
-           -h | --help - Show this menu
-           -v | --version - Show version
-           -o | --open - Open current directory in nemo
- 
+           -h / --help - Show this menu
+           -v / --version - Show installed version
+           -o / --open - Open current directory in the default file explorer
+           -d / --directory (path) - The directory to start in
+          
           Controls:
            Navigation:
            | Up- / Down Arrow - Navigate items
@@ -64,16 +65,20 @@ class Program
            | Shift + C - Copy current directory path to clipboard
            | F1 - Show this menu
            | F10 - Close file explorer (Also see Ctrl + D)
- 
+         
          """;
 
-    private static object _outLock = new();
     private static List<MenuContext> _contexts = [];
     private static int _selectedContextIndex = 0;
     private static MenuContext? _selectedContext => _selectedContextIndex >= _contexts.Count ? null : _contexts[_selectedContextIndex];
     
     private static List<Keybind> _keybinds = new();
     private static string[] _fileSizes = ["B", "kiB", "MiB", "GiB"];
+    
+    private static readonly object OutLock = new();
+    private static readonly ManualResetEventSlim ExitEvent = new();
+
+    private static string? _startDir = null;
     
     public static void Main(string[] args)
     {
@@ -97,11 +102,12 @@ class Program
                     {
                         Process proc = new()
                         {
-                            StartInfo = new()
+                            StartInfo =
                             {
-                                FileName = "nemo",
-                                Arguments = $"\"{Directory.GetCurrentDirectory()}\"",
+                                FileName = "xdg-open",
+                                Arguments = ".",
                                 UseShellExecute = false,
+                                CreateNoWindow = true,
                             },
                         };
 
@@ -109,9 +115,22 @@ class Program
                     }
                     
                     return;
+                
+                case "--directory":
+                case "-d":
+                    if (args.Length < i + 2)
+                    {
+                        Console.WriteLine("Missing argument (path)\n");
+                        return;
+                    }
+                    
+                    _startDir = args[i + 1];
+                break;
             }
         }
 
+        Directory.SetCurrentDirectory(_startDir ?? Directory.GetCurrentDirectory());
+        
         InputListener.Init();
         InputListener.DisableEcho();
         
@@ -129,7 +148,7 @@ class Program
         
         if (_selectedContext.Listener == null)
         {
-            Console.WriteLine("Could not load input listener");
+            Console.WriteLine("Could not load input listener\n");
             return;
         }
         
@@ -143,60 +162,64 @@ class Program
             int consoleHeight = Console.WindowHeight;
             while (!_selectedContext.ExitEvent.IsSet)
             {
-                if (consoleWidth != Console.WindowWidth || consoleHeight != Console.WindowHeight)
+                if (consoleWidth == Console.WindowWidth && consoleHeight == Console.WindowHeight)
                 {
-                    consoleWidth = Console.WindowWidth;
-                    consoleHeight = Console.WindowHeight;
-
-                    OnResize();
+                    continue;
                 }
+                
+                consoleWidth = Console.WindowWidth;
+                consoleHeight = Console.WindowHeight;
+
+                OnResize();
             }
         });
 
         _selectedContext.RedrawMenu();
-        _selectedContext.ExitEvent.Wait();
+        ExitEvent.Wait();
     }
 
     private static void DrawMenu(MenuContext context)
     {
-        lock (_outLock)
+        lock (OutLock)
         lock (context.OutLock)
         {
-            Console.SetCursorPosition(context.Menu.X, context.Menu.Y);
-            Console.Write("\x1b[?7l");
+            void PrintTopBar()
+            {
+                string cwd = $"File-Explorer ({(context.Cwd == context.BookmarkDir ? "Bookmarks" : context.Cwd)})";
+                
+                Console.SetCursorPosition(context.Menu.X, context.Menu.Y);
+                Console.Write($"\x1b[?7l{Color.Reset.ToAnsi()} ");
+                
+                int diff = Math.Max(cwd.Length - context.Menu.MaxWidth, 0);
+                string dots = new('.', Math.Min(diff + 1, 3));
+                Console.Write(cwd.Length > context.Menu.MaxWidth - 1 ? dots + cwd.Substring(diff + dots.Length + 1) : cwd);
+            }
             
             if (context.Menu.GetItemCount() == 0)
             {
-                Console.Clear();
-                Console.WriteLine($"\x1b[?7l{Color.Reset.ToAnsi()} File-Explorer ({Directory.GetCurrentDirectory()})");
+                PrintTopBar();
                 Console.WriteLine("\x1b[?7h");
                 
                 return;
             }
-        }
+            
+            int longestLine;
+            try
+            {
+                longestLine = context.Menu
+                                     .Items
+                                     .Where(item => item.Data.TryGetValue("ItemType", out string? type) && type == "File")
+                                     .Max(item => item.Item.Length);
+            }
+            catch (InvalidOperationException)
+            {
+                longestLine = -1;
+            }
         
-        int longestLine;
-        try
-        {
-            longestLine = context.Menu
-                                 .Items
-                                 .Where(item => item.Data.TryGetValue("ItemType", out string? type) && type == "File")
-                                 .Max(item => item.Item.Length);
-        }
-        catch (InvalidOperationException)
-        {
-            longestLine = -1;
-        }
-
-        
-        string cwd = context.Cwd == context.BookmarkDir ? "Bookmarks" : context.Cwd;
-        Console.WriteLine($"\x1b[?7l{Color.Reset.ToAnsi()} File-Explorer ({cwd})");
-        
-        lock (_outLock)
-        lock (context.OutLock)
-        {
+            PrintTopBar();
+            
             int dy = 1;
-        context.Menu
+            context.Menu
                .GetViewItems()
                .ForEach(item =>
                {
@@ -250,7 +273,7 @@ class Program
                    builder.Append(new string(' ',
                        Math.Max(context.Menu.MaxWidth - Color.TrimAnsi(builder.ToString()).Length, 0)));
                    
-                   lock (_outLock)
+                   lock (OutLock)
                    lock (context.OutLock)
                    {
                        Console.SetCursorPosition(context.Menu.X, context.Menu.Y + dy);
@@ -278,7 +301,7 @@ class Program
     private static void OnResize()
     {
         UpdateContexts();
-        lock (_outLock)
+        lock (OutLock)
         {
             Console.Clear();
         }
@@ -300,17 +323,22 @@ class Program
         MenuContext context = new()
         {
             Menu = new(),
+            OutLock = OutLock,
+            ExitEvent = ExitEvent,
         };
         
         context.Listener = InputListener.New();
+        if (context.Listener == null)
+        {
+            throw new InvalidOperationException("Could not load input listener\n");
+        }
+        
         context.Listener.RaiseEvents = false;
         
         context.OnClickDir(new CmdLabel(Directory.GetCurrentDirectory()), false);
         
         context.BookmarkDir = Path.Combine(DirectoryHelper.GetAppDataDirPath(), "fe", "Bookmarks");
         DirectoryHelper.CreateDir(context.BookmarkDir);
-        
-        //MapKeybinds(context);
 
         context.Listener.RepeatRateMs = 30;
         context.Listener.StartListening();

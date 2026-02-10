@@ -12,8 +12,8 @@ public class ExitKeybind(MenuContext context) : Keybind(context)
             Console.Clear();
             
             InputListener.EnableEcho();
-            _context.Listener.Dispose();
-            _context.Listener.WaitForDispose();
+            _context.Listener?.Dispose();
+            _context.Listener?.WaitForDispose();
             
             _context.ExitEvent.Set();
         }

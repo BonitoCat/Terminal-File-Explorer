@@ -35,8 +35,8 @@ public class MenuContext
     public CancellationTokenSource RefreshCancelSource { get; set; } = new();
     public bool CanDraw { get; private set; } = true;
     public string Cwd { get; set; } = "/";
-    public object OutLock { get; } = new();
-    public readonly ManualResetEventSlim ExitEvent = new();
+    public required object OutLock { get; set; }
+    public required ManualResetEventSlim ExitEvent;
 
     private int _foldersLoaded;
     private int _filesLoaded;
@@ -427,6 +427,11 @@ public class MenuContext
 
     public void RedrawMenu()
     {
+        if (!CanDraw)
+        {
+            return;
+        }
+        
         if (Interlocked.Exchange(ref _redrawPending, 1) == 1)
         {
             return;

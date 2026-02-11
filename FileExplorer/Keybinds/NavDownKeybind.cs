@@ -14,7 +14,7 @@ public class NavDownKeybind(MenuContext context) : Keybind(context)
         
         if (_context.Listener.IsKeyDown(Key.LeftShift))
         {
-            _context.Listener.RepeatRateMs = 20;
+            _context.Listener.RepeatIntervalMs = 20;
             _context.Listener.RepeatDelayMs = 0;
         }
         
@@ -24,7 +24,7 @@ public class NavDownKeybind(MenuContext context) : Keybind(context)
     
     public override void OnKeyUp()
     {
-        _context.Listener.RepeatRateMs = 30;
+        _context.Listener.RepeatIntervalMs = 30;
         _context.Listener.RepeatDelayMs = 250;
     }
 }

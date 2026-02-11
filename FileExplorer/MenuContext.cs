@@ -37,6 +37,7 @@ public class MenuContext
     public string Cwd { get; set; } = "/";
     public required object OutLock { get; set; }
     public required ManualResetEventSlim ExitEvent;
+    private Timer? _cwdTimer;
 
     private int _foldersLoaded;
     private int _filesLoaded;
@@ -461,8 +462,24 @@ public class MenuContext
         {
             Console.Clear();
         }
+
+        try
+        {
+            Cwd = Directory.GetCurrentDirectory();
+        }
+        catch (FileNotFoundException)
+        {
+            Cwd = FindExistingTopFolder();
+            
+            Directory.SetCurrentDirectory(Cwd);
+            OnClickDir(new(Cwd), false);
+        }
+
+        if (!Directory.Exists(sender.Text))
+        {
+            return;
+        }
         
-        Cwd = Directory.GetCurrentDirectory();
         if (saveToHistory && Cwd != BookmarkDir)
         {
             DirHistory.Push(Path.GetFullPath(Cwd));
@@ -535,11 +552,51 @@ public class MenuContext
                 Menu.MenuUpdate.Invoke();
             }
         };
-        
+
+        _cwdTimer?.Dispose();
+        _cwdTimer = new(_ =>
+        {
+            if (!Directory.Exists(Cwd))
+            {
+                string path = FindExistingTopFolder();
+                Directory.SetCurrentDirectory(path);
+            
+                OnClickDir(new(path), false);   
+            }
+        }, null, 0L, 300L);
+
         RefreshItems();
         
         Menu.ViewIndex = 0;
         Menu.SelectedIndex = 0;
+    }
+
+    public string FindExistingTopFolder()
+    {
+        if (!Directory.Exists(Cwd))
+        {
+            string path = Cwd;
+            List<string> parts = path.Split(Path.DirectorySeparatorChar).ToList();
+
+            if (parts.Count > 0)
+            {
+                parts[0] = Path.DirectorySeparatorChar + parts[0];
+            }
+            else
+            {
+                Path.DirectorySeparatorChar.ToString();
+            }
+            
+            do
+            {
+                parts.RemoveAt(parts.Count - 1);
+                path = Path.Combine(parts.ToArray());
+            } while (!Directory.Exists(path) && !string.IsNullOrWhiteSpace(path.TrimEnd(Path.DirectorySeparatorChar)));
+
+            return path;
+        }
+
+        return Cwd;
     }
     
     public bool RequiresElevatedAccess(string path)
@@ -587,11 +644,11 @@ public class MenuContext
         int cursor = builder.Length;
         void Redraw()
         {
-            int top = Console.CursorTop;
+            Console.CursorVisible = false;
+            int top = Menu.MaxHeight + 4;
 
             Console.SetCursorPosition(0, top);
             Console.Write("\x1b[2K");
-            Console.SetCursorPosition(0, top);
 
             Console.Write(inputText);
             if (!inputHidden)
@@ -604,10 +661,16 @@ public class MenuContext
             }
             
             Console.SetCursorPosition(cursor + StripAnsi(inputText).Length, top);
+            Console.CursorVisible = true;
         }
         
         void OnKeyDown(Key key, KeyDownEventArgs e)
         {
+            if (key == Key.Escape)
+            {
+                return;
+            }
+            
             if (key == Key.Enter)
             {
                 result = enterNull && builder.Length == 0
@@ -623,7 +686,18 @@ public class MenuContext
                 case Key.ArrowLeft:
                     if (cursor > 0)
                     {
-                        cursor--;
+                        if (keyListener.IsKeyDown(Key.LeftCtrl))
+                        {
+                            do
+                            {
+                                cursor--;
+                            } while (cursor > 0 && builder[cursor] != ' ');
+                        }
+                        else
+                        {
+                            cursor--;
+                        }
+                        
                         Redraw();
                     }
                     
@@ -632,7 +706,18 @@ public class MenuContext
                 case Key.ArrowRight:
                     if (cursor < builder.Length)
                     {
-                        cursor++;
+                        if (keyListener.IsKeyDown(Key.LeftCtrl))
+                        {
+                            do
+                            {
+                                cursor++;
+                            } while (cursor < builder.Length && builder[cursor] != ' ');
+                        }
+                        else
+                        {
+                            cursor++;
+                        }
+                        
                         Redraw();
                     }
                     
@@ -641,8 +726,22 @@ public class MenuContext
                 case Key.Backspace:
                     if (cursor > 0)
                     {
-                        builder.Remove(cursor - 1, 1);
-                        cursor--;
+                        if (keyListener.IsKeyDown(Key.LeftCtrl))
+                        {
+                            char lastChar;
+                            do
+                            {
+                                lastChar = builder[cursor - 1];
+                                builder.Remove(cursor - 1, 1);
+                                cursor--;
+                            } while (cursor > 0 && lastChar != ' ');
+                        }
+                        else
+                        {
+                            builder.Remove(cursor - 1, 1);
+                            cursor--;
+                        }
+                        
                         Redraw();
                     }
                     
@@ -654,7 +753,20 @@ public class MenuContext
                         return;
                     }
                     
-                    builder.Remove(cursor, 1);
+                    if (keyListener.IsKeyDown(Key.LeftCtrl))
+                    {
+                        char lastChar;
+                        do
+                        {
+                            lastChar = builder[cursor];
+                            builder.Remove(cursor, 1);
+                        } while (cursor < builder.Length && lastChar != ' ');
+                    }
+                    else
+                    {
+                        builder.Remove(cursor, 1);
+                    }
+                    
                     Redraw();
                     
                     return;

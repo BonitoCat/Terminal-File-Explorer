@@ -4,7 +4,7 @@ namespace FileExplorer.Keybinds;
 
 public class DirPathKeybind(MenuContext context) : Keybind(context)
 {
-    public override void OnKeyUp()
+    public override void OnKeyJustPressed()
     {
         lock (_context.Menu.Lock)
         {

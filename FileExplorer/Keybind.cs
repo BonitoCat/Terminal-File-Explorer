@@ -22,4 +22,6 @@ public abstract class Keybind
     public virtual void OnKeyDown(KeyDownEventArgs e) { }
 
     public virtual void OnKeyUp() { }
+    
+    public virtual void OnKeyJustPressed() { }
 }

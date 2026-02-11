@@ -6,6 +6,8 @@ using FileExplorer.Keybinds;
 using FileLib;
 using InputLib;
 using InputLib.EventArgs;
+using InputLib.PlatformListener;
+using Microsoft.VisualBasic.FileIO;
 
 namespace FileExplorer;
 
@@ -77,8 +79,7 @@ class Program
     
     private static readonly object OutLock = new();
     private static readonly ManualResetEventSlim ExitEvent = new();
-
-    private static string? _startDir = null;
+    private static string? _startDir;
     
     public static void Main(string[] args)
     {
@@ -145,10 +146,10 @@ class Program
 
         WindowManager.Instance.MainWindow.Title = "Terminal File-Explorer";
         WindowManager.Instance.MainWindow.OnWindowResize += OnResize;
-        
-        if (_selectedContext.Listener == null)
+
+        if (_selectedContext == null || _selectedContext.Listener == null)
         {
-            Console.WriteLine("Could not load input listener\n");
+            Console.WriteLine("Something went wrong while loading\n");
             return;
         }
         
@@ -326,7 +327,7 @@ class Program
             OutLock = OutLock,
             ExitEvent = ExitEvent,
         };
-        
+
         context.Listener = InputListener.New();
         if (context.Listener == null)
         {
@@ -340,11 +341,12 @@ class Program
         context.BookmarkDir = Path.Combine(DirectoryHelper.GetAppDataDirPath(), "fe", "Bookmarks");
         DirectoryHelper.CreateDir(context.BookmarkDir);
 
-        context.Listener.RepeatRateMs = 30;
+        context.Listener.RepeatIntervalMs = 30;
         context.Listener.StartListening();
         
         context.Listener.OnKeyDown += (key, e) => HandleKeyDown(context.Listener, key, e);
         context.Listener.OnKeyUp += key => HandleKeyUp(context.Listener, key);
+        context.Listener.OnKeyJustPressed += key => HandleKeyJustPressed(context.Listener, key);
         
         context.Menu.MenuUpdate += () =>
         {
@@ -493,5 +495,17 @@ class Program
                 .FirstOrDefault();
 
         bestMatch?.OnKeyUp();
+    }
+    
+    private static void HandleKeyJustPressed(InputListener listener, Key key)
+    {
+        List<Key> heldKeys = listener.GetHeldKeys().ToList();
+        Keybind? bestMatch =
+            _keybinds
+                .Where(kb => kb.Keys.All(k => heldKeys.Contains(k)))
+                .OrderByDescending(kb => kb.Keys.Count)
+                .FirstOrDefault();
+
+        bestMatch?.OnKeyJustPressed();
     }
 }

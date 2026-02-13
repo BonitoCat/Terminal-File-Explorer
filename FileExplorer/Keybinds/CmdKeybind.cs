@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using FileExplorer.Context;
 using InputLib;
 using InputLib.EventArgs;
 
@@ -57,5 +58,6 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
         _context.EnableDrawing();
         
         _context.Listener.ConsumeNextKeyDown(Key.D);
+        _context.RedrawMenu();
     }
 }

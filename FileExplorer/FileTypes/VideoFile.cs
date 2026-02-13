@@ -1,5 +1,6 @@
 using CmdMenu;
 using CmdMenu.Controls;
+using FileExplorer.Context;
 
 namespace FileExplorer.FileTypes;
 

@@ -1,5 +1,6 @@
 using CmdMenu;
 using CmdMenu.Controls;
+using FileExplorer.Context;
 
 namespace FileExplorer.Keybinds;
 
@@ -14,9 +15,9 @@ public class SelectAllKeybind(MenuContext context) : Keybind(context)
                 continue;
             }
                         
-            if (!_context.SelectedItems.Contains(item.Item))
+            if (!_context.SelectedItems.Contains(item))
             {
-                _context.SelectedItems.Add(item.Item);
+                _context.SelectedItems.Add(item);
             }
         }
         

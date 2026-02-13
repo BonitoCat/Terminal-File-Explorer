@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using CmdMenu;
 using CmdMenu.Controls;
+using FileExplorer.Context;
 using InputLib;
 
 namespace FileExplorer.FileTypes;
@@ -15,6 +16,7 @@ public class TextFile
         }
         
         context.Listener.ConsumeNextKeyUp(Key.LeftCtrl);
+        context.Listener.WaitForKeyInput();
         context.Listener.RaiseEvents = false;
         
         int lines = Console.WindowHeight;

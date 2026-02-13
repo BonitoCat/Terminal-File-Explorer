@@ -1,5 +1,6 @@
 using CmdMenu;
 using CmdMenu.Controls;
+using FileExplorer.Context;
 using InputLib.EventArgs;
 
 namespace FileExplorer.Keybinds;
@@ -13,7 +14,7 @@ public class DuplicateKeybind(MenuContext context) : Keybind(context)
             List<string> dupeItems = new();
             if (_context.SelectedItems.Count > 0)
             {
-                dupeItems.AddRange(_context.SelectedItems.Select(item => Path.GetFullPath(item.Text)));
+                dupeItems.AddRange(_context.SelectedItems.Select(item => Path.GetFullPath(item.Item.Text)));
             }
             else
             {

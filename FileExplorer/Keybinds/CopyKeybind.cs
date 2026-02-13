@@ -1,4 +1,5 @@
 using CmdMenu.Controls;
+using FileExplorer.Context;
 
 namespace FileExplorer.Keybinds;
 
@@ -30,7 +31,11 @@ public class CopyKeybind(MenuContext context) : Keybind(context)
                 }
             }
 
-            Clipboard.Write(ClipboardMode.Copy, paths);
+            _context.ClipboardContext.Items.Clear();
+            _context.ClipboardContext.Items.AddRange(paths);
+            _context.ClipboardContext.Mode = ClipboardMode.Copy;
+            
+            Clipboard.WritePaths(ClipboardMode.Copy, paths);
         }
     }
 }

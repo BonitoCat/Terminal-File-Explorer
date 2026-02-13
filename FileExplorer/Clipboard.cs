@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.MemoryMappedFiles;
 using System.Text;
 using FileLib;
@@ -9,7 +10,7 @@ public static class Clipboard
     private const string Name = "fe.clipboard";
     private const int Size = 16 * 1024;
 
-    public static void Write(ClipboardMode mode, IEnumerable<string> paths)
+    public static void WritePaths(ClipboardMode mode, IEnumerable<string> paths)
     {
         string filePath = Path.Combine(DirectoryHelper.GetCacheDirPath(), Name);
         
@@ -28,7 +29,7 @@ public static class Clipboard
         }
     }
 
-    public static void Read(out ClipboardMode mode, out string[] paths)
+    public static void ReadPaths(out ClipboardMode mode, out string[] paths)
     {
         string filePath = Path.Combine(DirectoryHelper.GetCacheDirPath(), Name);
         
@@ -46,12 +47,91 @@ public static class Clipboard
         }
     }
 
-    public static void Clear()
+    public static void ClearPaths()
     {
         string filePath = Path.Combine(DirectoryHelper.GetCacheDirPath(), Name);
         if (File.Exists(filePath))
         {
             File.Delete(filePath);
         }
+    }
+    
+    public static void Copy(string text)
+    {
+        if (IsWayland() && File.Exists("/usr/bin/wl-copy"))
+        {
+            RunWithInput("wl-copy", text);
+            return;
+        }
+
+        if (File.Exists("/usr/bin/xclip"))
+        {
+            RunWithInput("xclip -selection clipboard", text);
+            return;
+        }
+
+        throw new InvalidOperationException("No clipboard utility found (wl-copy or xclip)");
+    }
+    
+    public static string Read()
+    {
+        if (IsWayland() && File.Exists("/usr/bin/wl-paste"))
+        {
+            return RunWithOutput("wl-paste");
+        }
+
+        if (File.Exists("/usr/bin/xclip"))
+        {
+            return RunWithOutput("xclip -selection clipboard -o");
+        }
+
+        throw new InvalidOperationException("No clipboard utility found (wl-paste or xclip).");
+    }
+
+    private static bool IsWayland()
+    {
+        string? wayland = Environment.GetEnvironmentVariable("WAYLAND_DISPLAY");
+        return !string.IsNullOrEmpty(wayland);
+    }
+
+    private static void RunWithInput(string command, string input)
+    {
+        ProcessStartInfo psi = new()
+        {
+            FileName = "/bin/bash",
+            Arguments = "-c \"" + command + "\"",
+            RedirectStandardInput = true,
+            UseShellExecute = false,
+        };
+        
+        using Process process = new();
+        process.StartInfo = psi;
+        process.Start();
+
+        if (!string.IsNullOrEmpty(input))
+        {
+            process.StandardInput.Write(input);
+            process.StandardInput.Close();
+        }
+        
+        process.WaitForExit();
+    }
+    
+    private static string RunWithOutput(string command)
+    {
+        ProcessStartInfo psi = new()
+        {
+            FileName = "/bin/bash",
+            Arguments = "-c \"" + command + "\"",
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+        };
+        
+        using Process process = new();
+        process.StartInfo = psi;
+        process.Start();
+        
+        process.WaitForExit();
+        return process.StandardOutput.ReadToEnd();
     }
 }

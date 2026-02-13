@@ -1,6 +1,7 @@
 using System.Text;
 using CmdMenu;
 using CmdMenu.Controls;
+using FileExplorer.Context;
 
 namespace FileExplorer.Keybinds;
 

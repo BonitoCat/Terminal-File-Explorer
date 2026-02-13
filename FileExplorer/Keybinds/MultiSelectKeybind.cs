@@ -1,6 +1,7 @@
 using System.Reflection.Emit;
 using CmdMenu;
 using CmdMenu.Controls;
+using FileExplorer.Context;
 
 namespace FileExplorer.Keybinds;
 
@@ -8,7 +9,7 @@ public class MultiSelectKeybind(MenuContext context) : Keybind(context)
 {
     public override void OnKeyUp()
     {
-        int lastSelectedIndex = _context.Menu.IndexOf(new(_context.SelectedItems.LastOrDefault()));
+        int lastSelectedIndex = _context.Menu.IndexOf(_context.SelectedItems.LastOrDefault());
         if (lastSelectedIndex == -1 || lastSelectedIndex == _context.Menu.SelectedIndex)
         {
             _context.SelectItem();
@@ -25,9 +26,9 @@ public class MultiSelectKeybind(MenuContext context) : Keybind(context)
                     continue;
                 }
                         
-                if (!_context.SelectedItems.Contains(item.Item))
+                if (!_context.SelectedItems.Contains(item))
                 {
-                    _context.SelectedItems.Add(item.Item);
+                    _context.SelectedItems.Add(item);
                 }
             }
         }
@@ -41,9 +42,9 @@ public class MultiSelectKeybind(MenuContext context) : Keybind(context)
                     continue;
                 }
                         
-                if (!_context.SelectedItems.Contains(item.Item))
+                if (!_context.SelectedItems.Contains(item))
                 {
-                    _context.SelectedItems.Add(item.Item);
+                    _context.SelectedItems.Add(item);
                 }
             }
         }

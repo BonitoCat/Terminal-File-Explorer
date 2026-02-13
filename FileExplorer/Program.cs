@@ -2,6 +2,7 @@
 using System.Text;
 using CmdMenu;
 using CmdMenu.Controls;
+using FileExplorer.Context;
 using FileExplorer.Keybinds;
 using FileLib;
 using InputLib;
@@ -24,6 +25,7 @@ class Program
            -v / --version - Show installed version
            -o / --open - Open current directory in the default file explorer
            -d / --directory (path) - The directory to start in
+           -t / --tty - Force {Process.GetCurrentProcess().ProcessName} to start with tty input
           
           Controls:
            Navigation:
@@ -71,15 +73,17 @@ class Program
          """;
 
     private static List<MenuContext> _contexts = [];
-    private static int _selectedContextIndex = 0;
+    private static int _selectedContextIndex;
     private static MenuContext? _selectedContext => _selectedContextIndex >= _contexts.Count ? null : _contexts[_selectedContextIndex];
     
     private static List<Keybind> _keybinds = new();
     private static string[] _fileSizes = ["B", "kiB", "MiB", "GiB"];
     
     private static readonly object OutLock = new();
+    private static readonly ClipboardContext ClipboardContext = new();
     private static readonly ManualResetEventSlim ExitEvent = new();
     private static string? _startDir;
+    private static bool _forceTtyInput;
     
     public static void Main(string[] args)
     {
@@ -127,6 +131,11 @@ class Program
                     
                     _startDir = args[i + 1];
                 break;
+                
+                case "--tty":
+                case "-t":
+                    _forceTtyInput = true;
+                break;
             }
         }
 
@@ -134,6 +143,10 @@ class Program
         
         InputListener.Init();
         InputListener.DisableEcho();
+        
+        Clipboard.ReadPaths(out ClipboardMode mode, out string[] paths);
+        ClipboardContext.Items.AddRange(paths);
+        ClipboardContext.Mode = mode;
         
         _contexts.Add(CreateMenuContext());
         UpdateContexts();
@@ -230,16 +243,21 @@ class Program
                    builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
                    builder.Append(i == context.Menu.SelectedIndex ? " > " : "   ");
 
-                   bool hasFullPath = item.Data.TryGetValue("FullPath", out string? path);
+                   bool hasFullPath = item.Data.TryGetValue("FullPath", out string? fullPath);
                    bool hasDefaultColor = item.Data.TryGetValue("DefaultColor", out string? defaultColor);
-                   bool hasCutColor = item.Data.TryGetValue("CutColor", out string? cutColor);
-                   if (hasFullPath && hasDefaultColor && hasCutColor)
+                   bool hasDimmedColor = item.Data.TryGetValue("DimmedColor", out string? cutColor);
+                   if (hasFullPath && hasDefaultColor && hasDimmedColor)
                    {
-                       string ansiColor = (context != _selectedContext) || (context.MoveItems.Contains(path) && context.MoveStyle == MoveStyle.Cut) ? cutColor : defaultColor;
+                       string ansiColor = 
+                           context != _selectedContext ||
+                           (context.ClipboardContext.Items.Contains(fullPath) && context.ClipboardContext.Mode == ClipboardMode.Cut)
+                           ? cutColor
+                           : defaultColor;
+                       
                        item.Item.Style.Foreground = Color.FromRgbString(ansiColor);
                    }
-
-                   if (context.SelectedItems.Contains(item.Item))
+                   
+                   if (context.SelectedItems.Contains(item))
                    {
                        builder.Append(item.Item.Prefix);
                        builder.Append(Color.White.ToAnsi(Color.AnsiType.Background));
@@ -324,11 +342,13 @@ class Program
         MenuContext context = new()
         {
             Menu = new(),
+            ClipboardContext = ClipboardContext,
             OutLock = OutLock,
             ExitEvent = ExitEvent,
+            ForceTtyInput = _forceTtyInput,
         };
 
-        context.Listener = InputListener.New();
+        context.Listener = _forceTtyInput ? new TtyInputListener() : InputListener.New();
         if (context.Listener == null)
         {
             throw new InvalidOperationException("Could not load input listener\n");

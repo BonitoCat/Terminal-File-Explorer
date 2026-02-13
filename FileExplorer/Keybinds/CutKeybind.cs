@@ -1,5 +1,6 @@
 using CmdMenu;
 using CmdMenu.Controls;
+using FileExplorer.Context;
 
 namespace FileExplorer.Keybinds;
 
@@ -16,6 +17,8 @@ public class CutKeybind(MenuContext context) : Keybind(context)
                                 .Select(item => item.Data.GetValueOrDefault("FullPath", ""))
                                 .Where(path => !string.IsNullOrEmpty(path))
                                 .ToArray();
+
+                _context.SelectedItems.RemoveAll(item => paths.Contains(item.Data.GetValueOrDefault("FullPath", "")));
             }
             else
             {
@@ -30,8 +33,12 @@ public class CutKeybind(MenuContext context) : Keybind(context)
                     paths = [path];
                 }
             }
+            
+            _context.ClipboardContext.Items.Clear();
+            _context.ClipboardContext.Items.AddRange(paths);
+            _context.ClipboardContext.Mode = ClipboardMode.Cut;
 
-            Clipboard.Write(ClipboardMode.Cut, paths);
+            Clipboard.WritePaths(ClipboardMode.Cut, paths);
         }
 
         _context.RedrawMenu();

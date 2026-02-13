@@ -1,5 +1,6 @@
 using CmdMenu;
 using CmdMenu.Controls;
+using FileExplorer.Context;
 
 namespace FileExplorer.Keybinds;
 
@@ -13,7 +14,7 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
             Console.CursorVisible = true;
             if (_context.SelectedItems.Count > 1)
             {
-                items.AddRange(_context.SelectedItems);
+                items.AddRange(_context.SelectedItems.Select(item => item.Item));
                 lock (_context.OutLock)
                 {
                     string? input;
@@ -41,7 +42,7 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
                 CmdListBoxItem<CmdLabel>? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
                 if (_context.SelectedItems.Count == 1)
                 {
-                    item.Item = _context.SelectedItems[0];
+                    item = _context.SelectedItems[0];
                 }
 
                 if (item?.Item.Text == "..")

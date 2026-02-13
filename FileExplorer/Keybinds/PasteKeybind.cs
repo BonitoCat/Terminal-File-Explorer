@@ -1,4 +1,5 @@
 using CmdMenu.Controls;
+using FileExplorer.Context;
 using InputLib.EventArgs;
 
 namespace FileExplorer.Keybinds;
@@ -9,7 +10,7 @@ public class PasteKeybind(MenuContext context) : Keybind(context)
     {
         lock (_context.Menu.Lock)
         {
-            Clipboard.Read(out ClipboardMode mode, out string[] paths);
+            Clipboard.ReadPaths(out ClipboardMode mode, out string[] paths);
             if (mode == ClipboardMode.Copy)
             {
                 foreach (string itemPath in paths)
@@ -52,7 +53,7 @@ public class PasteKeybind(MenuContext context) : Keybind(context)
                         CmdListBoxItem<CmdLabel>? item = _context.Menu.Items.FirstOrDefault(item => item.Item.Text == name);
                         if (item != null)
                         {
-                            _context.SelectedItems.Add(item.Item);
+                            _context.SelectedItems.Add(item);
                         }
                     }
                     catch { }
@@ -64,7 +65,10 @@ public class PasteKeybind(MenuContext context) : Keybind(context)
             }
         }
         
-        Clipboard.Clear();
+        _context.ClipboardContext.Items.Clear();
+        _context.ClipboardContext.Mode = ClipboardMode.None;
+        
+        Clipboard.ClearPaths();
         
         Console.Clear();
         _context.RefreshItems();

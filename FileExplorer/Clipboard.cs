@@ -85,7 +85,7 @@ public static class Clipboard
             return RunWithOutput("xclip -selection clipboard -o");
         }
 
-        throw new InvalidOperationException("No clipboard utility found (wl-paste or xclip).");
+        throw new InvalidOperationException("No clipboard utility found (wl-paste or xclip)");
     }
 
     private static bool IsWayland()

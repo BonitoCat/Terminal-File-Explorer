@@ -354,6 +354,7 @@ class Program
             throw new InvalidOperationException("Could not load input listener\n");
         }
         
+        context.Listener.PauseListening = true;
         context.Listener.RaiseEvents = false;
         
         context.OnClickDir(new CmdLabel(Directory.GetCurrentDirectory()), false);
@@ -397,9 +398,15 @@ class Program
 
     private static void SwitchContext(int dir)
     {
-        _contexts.ForEach(context => context.Listener.RaiseEvents = false);
+        _contexts.ForEach(context =>
+        {
+            context.Listener.PauseListening = true;
+            context.Listener.RaiseEvents = false;
+        });
         _selectedContextIndex = Math.Clamp(_selectedContextIndex + dir, 0, _contexts.Count - 1);
         MapKeybinds(_selectedContext);
+        
+        _selectedContext.Listener.PauseListening = false;
         _selectedContext.Listener.RaiseEvents = true;
 
         Directory.SetCurrentDirectory(_selectedContext.Cwd);

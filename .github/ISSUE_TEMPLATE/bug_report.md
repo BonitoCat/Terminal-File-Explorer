@@ -4,6 +4,11 @@ title: ""
 labels: ["bug"]
 
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Please fill out the information below.
+
   - type: dropdown
     id: priority
     attributes:
@@ -60,4 +65,3 @@ body:
     attributes:
       label: Additional context
       description: Add any other context about the problem here.
-

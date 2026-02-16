@@ -1,11 +1,7 @@
----
 name: Bug report
-about: Create a report to help us improve
-title: ''
-labels: bug
-assignees: BonitoCat
-
----
+description: Create a report to help us improve
+title: ""
+labels: ["bug"]
 
 body:
   - type: dropdown
@@ -20,24 +16,48 @@ body:
     validations:
       required: true
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: To Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: true
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Add screenshots if applicable.
 
-**Desktop (please complete the following information):**
- - OS: [e.g. Windows 10]
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      placeholder: e.g. Windows 10, Linux Mint, ...
 
-**Additional context**
-Add any other context about the problem here.
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add any other context about the problem here.
+

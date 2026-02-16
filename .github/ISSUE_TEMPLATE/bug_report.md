@@ -1,14 +1,13 @@
+---
 name: Bug report
-description: Create a report to help us improve
-title: ""
-labels: ["bug"]
+about: Create a report to help us improve
+title: ''
+labels: bug
+assignees: BonitoCat
+
+---
 
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Please fill out the information below.
-
   - type: dropdown
     id: priority
     attributes:
@@ -65,3 +64,4 @@ body:
     attributes:
       label: Additional context
       description: Add any other context about the problem here.
+

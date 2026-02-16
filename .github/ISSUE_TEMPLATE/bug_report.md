@@ -7,6 +7,19 @@ assignees: BonitoCat
 
 ---
 
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this issue?
+      options:
+        - Low
+        - Medium
+        - High
+    validations:
+      required: true
+
 **Describe the bug**
 A clear and concise description of what the bug is.
 

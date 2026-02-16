@@ -1,0 +1,38 @@
+name: Auto Label Issues
+
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+
+    permissions:
+      issues: write
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body.toLowerCase();
+
+            const labels = [];
+
+            if (body.includes("priority\nlow"))
+              labels.push("low priority");
+
+            if (body.includes("priority\nmedium"))
+              labels.push("medium priority");
+
+            if (body.includes("priority\nhigh"))
+              labels.push("high priority");
+
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: labels
+              });
+            }

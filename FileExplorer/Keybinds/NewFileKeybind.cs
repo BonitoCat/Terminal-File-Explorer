@@ -1,5 +1,6 @@
 using CmdMenu;
 using FileExplorer.Context;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -27,12 +28,13 @@ public class NewFileKeybind(MenuContext context) : Keybind(context)
             try
             {
                 File.Create(text).Close();
+                Logger.LogI("Created new file");
             }
             catch (Exception)
             {
                 return;
             }
-                
+            
             Console.Clear();
             _context.RefreshItems();
         }

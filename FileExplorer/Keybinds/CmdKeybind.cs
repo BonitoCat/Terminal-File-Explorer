@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices.Marshalling;
+using System.Text;
 using FileExplorer.Context;
 using InputLib;
 using InputLib.EventArgs;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -43,9 +45,13 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
             },
         };
         
+        Logger.LogI("Opened command line");
+        
         _context.CommandLine.Start();
         _context.CommandLine.WaitForExit();
         _context.CommandLine = null;
+        
+        Logger.LogI("Closed command line");
         
         Console.CursorVisible = false;
         lock (_context.OutLock)

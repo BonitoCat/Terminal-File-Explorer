@@ -1,6 +1,7 @@
 using CmdMenu.Controls;
 using FileExplorer.Context;
 using InputLib.EventArgs;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -24,7 +25,8 @@ public class ClickKeybind(MenuContext context) : Keybind(context)
             {
                 return;
             }
-        
+            
+            Logger.LogI("Opened file");
             _context.Menu.CallSelectedItemClick();
         }
         

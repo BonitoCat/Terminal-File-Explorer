@@ -1,5 +1,6 @@
 using FileExplorer.Context;
 using InputLib.EventArgs;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -10,6 +11,7 @@ public class SizeKeybind(MenuContext context) : Keybind(context)
         lock (_context.Menu.Lock)
         {
             _context.ShowFileSizes = !_context.ShowFileSizes;
+            Logger.LogI($"Toggled item sizes: {_context.ShowFileSizes}");
             
             lock (_context.OutLock)
             {

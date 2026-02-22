@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using FileExplorer.Context;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -17,7 +18,8 @@ public class NemoKeybind(MenuContext context) : Keybind(context)
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-            
+        
+        Logger.LogI("Opening external file explorer");
         proc.Start();
     }
 }

@@ -1,6 +1,7 @@
 using CmdMenu;
 using CmdMenu.Controls;
 using FileExplorer.Context;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -8,6 +9,8 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
 {
     public override void OnKeyUp()
     {
+        Logger.LogI("Delete requested");
+        
         lock (_context.Menu.Lock)
         {
             List<CmdLabel> items = [];
@@ -31,6 +34,8 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
                             Console.CursorVisible = false;
                             Console.Clear();
                             _context.RedrawMenu();
+                            
+                            Logger.LogI($"Canceled deleting {_context.SelectedItems.Count} items");
                         
                             return;
                         }
@@ -68,6 +73,8 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
                             Console.CursorVisible = false;
                             Console.Clear();
                             _context.RedrawMenu();
+                            
+                            Logger.LogI("Canceled deleting item");
                         
                             return;
                         }
@@ -95,6 +102,8 @@ public class DeletePermKeybind(MenuContext context) : Keybind(context)
                 }
                 catch { }
             }
+            
+            Logger.LogI($"Deleted {_context.SelectedItems.Count} items");
             
             Console.CursorVisible = false;
             Console.Clear();

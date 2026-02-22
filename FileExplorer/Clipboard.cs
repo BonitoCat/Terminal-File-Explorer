@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.MemoryMappedFiles;
 using System.Text;
 using FileLib;
+using LoggerLib;
 
 namespace FileExplorer;
 
@@ -27,6 +28,8 @@ public static class Clipboard
         {
             writer.Write(path);
         }
+        
+        Logger.LogI($"Wrote {array.Length} paths to the clipboard");
     }
 
     public static void ReadPaths(out ClipboardMode mode, out string[] paths)
@@ -45,6 +48,8 @@ public static class Clipboard
         {
             paths[i] = reader.ReadString();
         }
+        
+        Logger.LogI($"Read {count} paths from the clipboard");
     }
 
     public static void ClearPaths()
@@ -54,6 +59,8 @@ public static class Clipboard
         {
             File.Delete(filePath);
         }
+        
+        Logger.LogI("Cleared all paths from clipboard");
     }
     
     public static void Copy(string text)
@@ -61,12 +68,16 @@ public static class Clipboard
         if (IsWayland() && File.Exists("/usr/bin/wl-copy"))
         {
             RunWithInput("wl-copy", text);
+            Logger.LogI("Copied text to clipboard");
+            
             return;
         }
 
         if (File.Exists("/usr/bin/xclip"))
         {
+            Logger.LogI("Copied text to clipboard");
             RunWithInput("xclip -selection clipboard", text);
+            
             return;
         }
 
@@ -77,11 +88,13 @@ public static class Clipboard
     {
         if (IsWayland() && File.Exists("/usr/bin/wl-paste"))
         {
+            Logger.LogI("Read text from clipboard");
             return RunWithOutput("wl-paste");
         }
 
         if (File.Exists("/usr/bin/xclip"))
         {
+            Logger.LogI("Read text from clipboard");
             return RunWithOutput("xclip -selection clipboard -o");
         }
 

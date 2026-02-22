@@ -1,5 +1,6 @@
 using FileExplorer.Context;
 using InputLib;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -9,6 +10,8 @@ public class ExitKeybind(MenuContext context) : Keybind(context)
     {
         lock (_context.OutLock)
         {
+            Logger.LogI("Exit requested");
+            
             Console.CursorVisible = true;
             Console.Clear();
             

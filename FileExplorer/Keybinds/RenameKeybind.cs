@@ -2,6 +2,7 @@ using System.Text;
 using CmdMenu;
 using CmdMenu.Controls;
 using FileExplorer.Context;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -9,6 +10,8 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
 {
     public override void OnKeyUp()
     {
+        Logger.LogI("Rename requested");
+        
         lock (_context.Menu.Lock)
         {
             CmdListBoxItem<CmdLabel>? item = _context.Menu.GetItemAt(_context.Menu.SelectedIndex);
@@ -16,6 +19,8 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
             {
                 return;
             }
+            
+            Logger.LogI("Reading rename input...");
             
             Console.CursorVisible = true;
             string? name = _context.Input($"{Color.Reset.ToAnsi()} Rename to: ", _context.StripAnsi(item.Item.Text))?.Trim();
@@ -25,6 +30,8 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
                 Console.CursorVisible = false;
                 Console.Clear();
                 _context.RedrawMenu();
+                
+                Logger.LogI("Rename canceled");
                 
                 return;
             }
@@ -56,6 +63,8 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
                     Console.CursorVisible = false;
                     Console.Clear();
                     _context.RedrawMenu();
+                    
+                    Logger.LogI("Rename canceled");
                 
                     return;
                 }   
@@ -80,10 +89,13 @@ public class RenameKeybind(MenuContext context) : Keybind(context)
                         
                         _context.DirHistory.Push(dirPath);
                     }
+                    
+                    Logger.LogI("Directory renamed");
                 }
                 else if (File.Exists(item?.Item.Text))
                 {
                     File.Move(item.Item.Text, name);
+                    Logger.LogI("File renamed");
                 }
                 
                 item.Item.Text = name;

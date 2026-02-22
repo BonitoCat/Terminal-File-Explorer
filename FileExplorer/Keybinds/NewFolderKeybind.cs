@@ -1,5 +1,6 @@
 using CmdMenu;
 using FileExplorer.Context;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -27,6 +28,7 @@ public class NewFolderKeybind(MenuContext context) : Keybind(context)
             try
             {
                 Directory.CreateDirectory(text);
+                Logger.LogI("Created new directory");
             }
             catch (Exception)
             {

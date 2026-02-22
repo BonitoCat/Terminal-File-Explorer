@@ -2,8 +2,7 @@ using System.Text.RegularExpressions;
 
 public sealed class NaturalStringComparer : IComparer<string>
 {
-    private static readonly Regex _splitRegex =
-        new(@"\d+|\D+", RegexOptions.Compiled);
+    private static readonly Regex _splitRegex = new(@"\d+|\D+", RegexOptions.Compiled);
 
     public int Compare(string? x, string? y)
     {

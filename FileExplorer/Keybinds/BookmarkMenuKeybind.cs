@@ -12,7 +12,7 @@ public class BookmarkMenuKeybind(MenuContext context) : Keybind(context)
         {
             string cwd = Directory.GetCurrentDirectory();
             _context.OnClickDir(new(_context.BookmarkDir), cwd != _context.BookmarkDir);
-
+            
             void ItemAdded(CmdListBoxItem<CmdLabel> item)
             {
                 if (item.Item?.Text == "..")

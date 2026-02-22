@@ -1,5 +1,6 @@
 using FileExplorer.Context;
 using InputLib;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -9,6 +10,8 @@ public class HelpKeybind(MenuContext context, string helpString) : Keybind(conte
     {
         lock (_context.Menu.Lock)
         {
+            Logger.LogI("Help requested");
+            
             Console.Clear();
             Console.WriteLine(helpString);
             Thread.Sleep(500);

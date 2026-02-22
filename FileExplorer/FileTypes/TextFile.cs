@@ -3,6 +3,7 @@ using CmdMenu;
 using CmdMenu.Controls;
 using FileExplorer.Context;
 using InputLib;
+using LoggerLib;
 
 namespace FileExplorer.FileTypes;
 
@@ -22,6 +23,8 @@ public class TextFile
         int lines = Console.WindowHeight;
         int columns = Console.WindowWidth;
         Console.WriteLine($"\x1b[8;{Math.Max(lines, 45)};{Math.Max(Console.WindowWidth, 80)}t");
+        
+        Logger.LogI("Opened file in nano");
         
         Process proc = new()
         {
@@ -45,6 +48,8 @@ public class TextFile
             Console.CursorVisible = false;
             Console.WriteLine($"\x1b[8;{lines};{columns}t");
         }
+        
+        Logger.LogI("Closed file in nano");
         
         context.Listener.RaiseEvents = true;
         context.RedrawMenu();

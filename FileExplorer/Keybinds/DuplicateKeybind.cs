@@ -2,6 +2,7 @@ using CmdMenu;
 using CmdMenu.Controls;
 using FileExplorer.Context;
 using InputLib.EventArgs;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -56,6 +57,8 @@ public class DuplicateKeybind(MenuContext context) : Keybind(context)
                     File.Copy(itemPath, newName);
                 }
             }
+            
+            Logger.LogI($"Duplicated {dupeItems.Count} items");
             
             _context.RefreshItems();
         }

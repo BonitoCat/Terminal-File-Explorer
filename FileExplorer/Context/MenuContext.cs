@@ -7,6 +7,7 @@ using FileExplorer.FileTypes;
 using InputLib;
 using InputLib.EventArgs;
 using InputLib.PlatformListener;
+using LoggerLib;
 using SearchOption = System.IO.SearchOption;
 
 namespace FileExplorer.Context;
@@ -49,6 +50,8 @@ public class MenuContext
     
     public void RefreshItems()
     {
+        Logger.LogI("Refreshing items...");
+        
         SelectedItems.Clear();
         Menu.ClearItems();
 
@@ -57,6 +60,11 @@ public class MenuContext
         
         Task.Run(() =>
         {
+            lock (OutLock)
+            {
+                Console.Clear();
+            }
+            
             string cwd = Directory.GetCurrentDirectory();
             if (Directory.GetParent(cwd) != null)
             {
@@ -113,6 +121,7 @@ public class MenuContext
 
             if (RefreshCancelSource.Token.IsCancellationRequested)
             {
+                Logger.LogI("Item refresh cancelled");
                 return;
             }
             
@@ -123,6 +132,7 @@ public class MenuContext
             
             if (RefreshCancelSource.Token.IsCancellationRequested)
             {
+                Logger.LogI("Item refresh cancelled");
                 return;
             }
             
@@ -158,6 +168,7 @@ public class MenuContext
             
             if (RefreshCancelSource.Token.IsCancellationRequested)
             {
+                Logger.LogI("Item refresh cancelled");
                 return;
             }
 
@@ -221,6 +232,7 @@ public class MenuContext
             
             if (RefreshCancelSource.Token.IsCancellationRequested)
             {
+                Logger.LogI("Item refresh cancelled");
                 return;
             }
             
@@ -238,8 +250,11 @@ public class MenuContext
             
             if (RefreshCancelSource.Token.IsCancellationRequested)
             {
+                Logger.LogI("Item refresh cancelled");
                 return;
             }
+            
+            Logger.LogI($"Items refreshed, found items: {Menu.GetItemCount()}");
             
             RedrawMenu();
         }, RefreshCancelSource.Token);
@@ -447,11 +462,13 @@ public class MenuContext
 
     public void DisableDrawing()
     {
+        Logger.LogI("Disabled drawing");
         CanDraw = false;
     }
 
     public void EnableDrawing()
     {
+        Logger.LogI("Enabled drawing");
         CanDraw = true;
     }
     
@@ -461,6 +478,7 @@ public class MenuContext
         lock (Menu.Lock)
         {
             Console.Clear();
+            Logger.LogI("Clearing screen");
         }
 
         try
@@ -469,20 +487,24 @@ public class MenuContext
         }
         catch (FileNotFoundException)
         {
+            Logger.LogW("Could not find current directory, searching for next best...");
             Cwd = FindExistingTopFolder();
             
             Directory.SetCurrentDirectory(Cwd);
             OnClickDir(new(Cwd), false);
+            Logger.LogI("Found new directory");
         }
 
         if (!Directory.Exists(sender.Text))
         {
+            Logger.LogE("Clicked directory not found");
             return;
         }
         
         if (saveToHistory && Cwd != BookmarkDir)
         {
             DirHistory.Push(Path.GetFullPath(Cwd));
+            Logger.LogI("Added directory to stack");
         }
         
         Cwd = Path.GetFullPath(sender.Text);
@@ -511,6 +533,7 @@ public class MenuContext
                 }
                 catch (FileNotFoundException)
                 {
+                    Logger.LogI("Current directory was deleted");
                     currDirExists = false;
                 }
             
@@ -527,7 +550,8 @@ public class MenuContext
                         currentDir = Regex.Replace(currentDir, "[\\/][^\\/]+$", "");
                     }
                 }
-            
+                
+                Logger.LogI("New directory found");
                 OnClickDir(new(currentDir), false);
             };
         }
@@ -538,6 +562,20 @@ public class MenuContext
             if (item != null)
             {
                 Menu.RemoveItem(item);
+                
+                if (item.Data.TryGetValue("ItemType", out string? itemType))
+                {
+                    switch (itemType)
+                    {
+                        case "Folder":
+                            Logger.LogI("A folder was deleted");
+                        break;
+                        
+                        case "File":
+                            Logger.LogI("A file was deleted");
+                        break;
+                    }
+                };
             }
             
             RedrawMenu();
@@ -558,9 +596,12 @@ public class MenuContext
         {
             if (!Directory.Exists(Cwd))
             {
+                Logger.LogI("Current directory was deleted");
+                
                 string path = FindExistingTopFolder();
                 Directory.SetCurrentDirectory(path);
-            
+                
+                Logger.LogI("Found new directory");
                 OnClickDir(new(path), false);   
             }
         }, null, 0L, 300L);
@@ -626,6 +667,7 @@ public class MenuContext
 
     public string? Input(string inputText, string startValue = "", bool enterNull = false, bool escapeNo = false, bool inputHidden = false)
     {
+        Logger.LogI("Reading input...");
         Listener.RaiseEvents = false;
 
         InputListener? keyListener = ForceTtyInput ? new TtyInputListener() : InputListener.New();
@@ -819,7 +861,8 @@ public class MenuContext
         Listener.ConsumeNextKeyDown(Key.Enter);
         
         Console.CursorVisible = false;
-
+        Logger.LogI("Done reading input");
+        
         return result;
     }
     
@@ -862,7 +905,12 @@ public class MenuContext
         
         if (!SelectedItems.Remove(Menu.SelectedItem))
         {
+            Logger.LogI("Added item to selection");
             SelectedItems.Add(Menu.SelectedItem);
+        }
+        else
+        {
+            Logger.LogI("Removed item from selection");
         }
     }
 }

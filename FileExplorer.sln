@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetadataGenerator", "..\Met
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileLib", "..\FileLib\FileLib\FileLib.csproj", "{66B94691-7854-4509-837C-FAC52F1C0D7B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LoggerLib", "..\LoggerLib\LoggerLib\LoggerLib.csproj", "{4D160859-5E6F-4EDA-B9B0-F7E87A48CBC5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +38,9 @@ Global
 		{66B94691-7854-4509-837C-FAC52F1C0D7B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{66B94691-7854-4509-837C-FAC52F1C0D7B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{66B94691-7854-4509-837C-FAC52F1C0D7B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4D160859-5E6F-4EDA-B9B0-F7E87A48CBC5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4D160859-5E6F-4EDA-B9B0-F7E87A48CBC5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4D160859-5E6F-4EDA-B9B0-F7E87A48CBC5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4D160859-5E6F-4EDA-B9B0-F7E87A48CBC5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

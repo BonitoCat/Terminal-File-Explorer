@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using CmdMenu;
 using CmdMenu.Controls;
@@ -8,6 +9,7 @@ using FileLib;
 using InputLib;
 using InputLib.EventArgs;
 using InputLib.PlatformListener;
+using LoggerLib;
 using Microsoft.VisualBasic.FileIO;
 
 namespace FileExplorer;
@@ -138,8 +140,14 @@ class Program
                 break;
             }
         }
-
+        
         Directory.SetCurrentDirectory(_startDir ?? Directory.GetCurrentDirectory());
+
+        Logger.LogDir = Path.Combine(DirectoryHelper.GetAppDataDirPath(), "fe", "logs");
+        Logger.KeepLogs = 20;
+        Logger.LogDebug = false;
+        
+        Logger.CreateFile();
         
         InputListener.Init();
         InputListener.DisableEcho();
@@ -319,6 +327,8 @@ class Program
     
     private static void OnResize()
     {
+        Logger.LogI("Resized window");
+        
         UpdateContexts();
         lock (OutLock)
         {
@@ -327,12 +337,6 @@ class Program
         
         foreach (MenuContext context in _contexts)
         {
-            context.Menu.ViewRange = Math.Max(WindowManager.Instance.MainWindow.Height - 6, 0);
-            if (Console.WindowHeight >= context.Menu.ViewIndex + context.Menu.ViewRange - 1)
-            {
-                context.Menu.ViewIndex = 0;
-            }
-            
             context.RedrawMenu();
         }
     }
@@ -381,6 +385,8 @@ class Program
                 DrawMenu(context);
             }
         };
+        
+        Logger.LogI("Created new menu");
 
         return context;
     }
@@ -393,6 +399,12 @@ class Program
             _contexts[i].Menu.MaxHeight = Math.Max(Console.WindowHeight - 6, 0);
             _contexts[i].Menu.X = Console.WindowWidth / _contexts.Count * i;
             _contexts[i].Menu.ZIndex = i;
+            
+            _contexts[i].Menu.ViewRange = Math.Max(WindowManager.Instance.MainWindow.Height - 6, 0);
+            if (Console.WindowHeight >= _contexts[i].Menu.ViewIndex + _contexts[i].Menu.ViewRange - 1)
+            {
+                _contexts[i].Menu.ViewIndex = 0;
+            }
         }
     }
 
@@ -496,6 +508,8 @@ class Program
         _keybinds.Add(new SwitchMenuKeybind(context, -1, SwitchContext) { Keys = [Key.LeftCtrl, Key.ArrowLeft] });
         _keybinds.Add(new SwitchMenuKeybind(context, 1, SwitchContext) { Keys = [Key.LeftCtrl, Key.ArrowRight] });
         _keybinds.Add(new SwitchMenuKeybind(context, _selectedContextIndex == 0 ? 1 : -1, SwitchContext) { Keys = [Key.F6] });
+        
+        Logger.LogI("Mapped keybinds");
     }
 
     private static void HandleKeyDown(InputListener listener, Key key, KeyDownEventArgs e)

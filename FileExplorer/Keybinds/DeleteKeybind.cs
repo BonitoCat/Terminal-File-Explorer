@@ -2,6 +2,7 @@ using System.Diagnostics;
 using CmdMenu;
 using CmdMenu.Controls;
 using FileExplorer.Context;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -9,6 +10,8 @@ public class DeleteKeybind(MenuContext context) : Keybind(context)
 {
     public override void OnKeyUp()
     {
+        Logger.LogI("Move to recycle bin requested");
+        
         lock (_context.Menu.Lock)
         {
             List<CmdLabel> items = [];
@@ -32,6 +35,8 @@ public class DeleteKeybind(MenuContext context) : Keybind(context)
                             Console.CursorVisible = false;
                             Console.Clear();
                             _context.RedrawMenu();
+                            
+                            Logger.LogI($"Canceled moving {_context.SelectedItems.Count} items to recycle bin");
                         
                             return;
                         }
@@ -69,6 +74,8 @@ public class DeleteKeybind(MenuContext context) : Keybind(context)
                             Console.CursorVisible = false;
                             Console.Clear();
                             _context.RedrawMenu();
+                            
+                            Logger.LogI("Canceled moving item to recycle bin");
                         
                             return;
                         }
@@ -86,23 +93,25 @@ public class DeleteKeybind(MenuContext context) : Keybind(context)
                         tempHistory = tempHistory.Where(path => !path.Contains(Path.GetFullPath(item))).ToList();
 
                         _context.DirHistory = new(tempHistory);
+                        
+                        ProcessStartInfo startInfo = new()
+                        {
+                            FileName = "gio",
+                            Arguments = $"trash \"{item}\"",
+                            RedirectStandardInput = true,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true
+                        };
+                    
+                        Process proc = new();
+                        proc.StartInfo = startInfo;
+                    
+                        proc.Start();
+                        proc.WaitForExit();
                     }
-
-                    ProcessStartInfo startInfo = new()
-                    {
-                        FileName = "gio",
-                        Arguments = $"trash \"{item}\"",
-                        RedirectStandardInput = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true
-                    };
-                    
-                    Process proc = new();
-                    proc.StartInfo = startInfo;
-                    
-                    proc.Start();
-                    proc.WaitForExit();
                 }
+                
+                Logger.LogI($"Moved {_context.SelectedItems.Count} items to the recycle bin");
             }
             catch { }
             

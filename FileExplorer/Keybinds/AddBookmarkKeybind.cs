@@ -1,5 +1,6 @@
 using CmdMenu;
 using FileExplorer.Context;
+using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
@@ -17,10 +18,12 @@ public class AddBookmarkKeybind(MenuContext context) : Keybind(context)
         if (Directory.Exists(Path.Combine(_context.BookmarkDir, dirName)))
         {
             Directory.Delete(Path.Combine(_context.BookmarkDir, dirName));
+            Logger.LogI("Removed directory from bookmarks");
         }
         else
         {
             Directory.CreateSymbolicLink(Path.Combine(_context.BookmarkDir, dirName), cwd);
+            Logger.LogI("Added directory to bookmarks");
         }
     }
 }

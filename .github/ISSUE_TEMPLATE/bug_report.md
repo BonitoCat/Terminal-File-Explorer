@@ -24,4 +24,6 @@ A clear and concise description of what you expected to happen.
 If applicable, add screenshots to help explain your problem.
 
 **Additional context**
-Make sure to add the corresponding log file from the app data folder
+Make sure to add the corresponding log file from the app data folder.
+(Windows: %appdata%\Roaming\fe\logs)
+(Linux: ~/.local/share/fe/logs)

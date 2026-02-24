@@ -2,7 +2,7 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FileExplorer", "FileExplorer\FileExplorer.csproj", "{369BC04B-0837-4ECB-A210-E1928EEB6B16}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CmdMenu", "..\CmdMenu\CmdMenu\CmdMenu.csproj", "{BF8C950D-6DA3-498B-AA90-6D4952B8CF8A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TuiLib", "..\CmdMenu\TuiLib\TuiLib.csproj", "{BF8C950D-6DA3-498B-AA90-6D4952B8CF8A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InputLib", "..\InputLib\InputLib\InputLib.csproj", "{1D406F30-2F47-4EE6-A2D6-277E11408D7E}"
 EndProject

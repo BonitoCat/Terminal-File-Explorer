@@ -58,8 +58,6 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
         {
             Console.Clear();
         }
-        
-        _context.RefreshItems();
 
         Thread.Sleep(100);
         _context.Listener.PauseListening = false;
@@ -67,7 +65,9 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
         InputListener.DisableEcho();
         _context.EnableDrawing();
         
+        _context.RefreshItems();
+        
         _context.Listener.ConsumeNextKeyDown(Key.D);
-        _context.RedrawMenu();
+        //_context.RedrawMenu();
     }
 }

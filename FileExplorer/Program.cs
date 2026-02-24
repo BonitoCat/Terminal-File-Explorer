@@ -1,8 +1,8 @@
 ﻿using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using CmdMenu;
-using CmdMenu.Controls;
+using TuiLib;
+using TuiLib.Controls;
 using FileExplorer.Context;
 using FileExplorer.Keybinds;
 using FileLib;
@@ -80,12 +80,15 @@ class Program
     
     private static List<Keybind> _keybinds = new();
     private static string[] _fileSizes = ["B", "kiB", "MiB", "GiB"];
+    private static char[] _throbberStates = ['|', '/', '-', '\\', '|', '/', '-', '\\'];
     
     private static readonly object OutLock = new();
     private static readonly ClipboardContext ClipboardContext = new();
     private static readonly ManualResetEventSlim ExitEvent = new();
     private static string? _startDir;
     private static bool _forceTtyInput;
+
+    private static int _throbberIndex = 0;
     
     public static void Main(string[] args)
     {
@@ -195,6 +198,29 @@ class Program
                 OnResize();
             }
         });
+        
+        Task.Run(() =>
+        {
+            while (!_selectedContext.ExitEvent.IsSet)
+            {
+                if (_selectedContext.IsReloading)
+                {
+                    Task.Delay(100).Wait();
+                    if (_selectedContext.IsReloading)
+                    {
+                        DrawThrobber();
+                    }
+                }
+                else
+                {
+                    lock (OutLock)
+                    {
+                        Console.SetCursorPosition(0, WindowManager.Instance.MainWindow.Height - 3);
+                        Console.Write($"{Color.Reset.ToAnsi()}\x1b[2K\n\x1b[2K\n\x1b[2K");
+                    }
+                }
+            }
+        });
 
         _selectedContext.RedrawMenu();
         ExitEvent.Wait();
@@ -301,7 +327,6 @@ class Program
                        Math.Max(context.Menu.MaxWidth - Color.TrimAnsi(builder.ToString()).Length, 0)));
                    
                    lock (OutLock)
-                   lock (context.OutLock)
                    {
                        Console.SetCursorPosition(context.Menu.X, context.Menu.Y + dy);
                        Console.Write(builder);
@@ -323,6 +348,17 @@ class Program
             
             Console.WriteLine("\x1b[?7h");
         }
+    }
+    
+    private static void DrawThrobber()
+    {
+        lock (OutLock)
+        {
+            Console.SetCursorPosition(0, WindowManager.Instance.MainWindow.Height - 2);
+            Console.WriteLine($"{Color.Reset.ToAnsi()} {_throbberStates[_throbberIndex]} Loading...");
+        }
+        
+        _throbberIndex = (_throbberIndex + 1) % _throbberStates.Length;
     }
     
     private static void OnResize()
@@ -422,8 +458,12 @@ class Program
         _selectedContext.Listener.RaiseEvents = true;
 
         Directory.SetCurrentDirectory(_selectedContext.Cwd);
+
+        lock (OutLock)
+        {
+            Console.Clear();
+        }
         
-        Console.Clear();
         _contexts.ForEach(DrawMenu);
     }
 

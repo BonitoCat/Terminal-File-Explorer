@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
-using CmdMenu;
-using CmdMenu.Controls;
+using TuiLib;
+using TuiLib.Controls;
 using FileExplorer.FileTypes;
 using InputLib;
 using InputLib.EventArgs;
@@ -33,6 +33,7 @@ public class MenuContext
     public List<CmdListBoxItem<CmdLabel>> SelectedItems { get; } = new();
     public CancellationTokenSource RefreshCancelSource { get; set; } = new();
     public bool CanDraw { get; private set; } = true;
+    public bool IsReloading { get; private set; }
     public string Cwd { get; set; } = "/";
     public required object OutLock { get; set; }
     public required ClipboardContext ClipboardContext { get; set; }
@@ -64,6 +65,8 @@ public class MenuContext
             {
                 Console.Clear();
             }
+            
+            IsReloading = true;
             
             string cwd = Directory.GetCurrentDirectory();
             if (Directory.GetParent(cwd) != null)
@@ -122,6 +125,8 @@ public class MenuContext
             if (RefreshCancelSource.Token.IsCancellationRequested)
             {
                 Logger.LogI("Item refresh cancelled");
+                IsReloading = false;
+                
                 return;
             }
             
@@ -133,6 +138,8 @@ public class MenuContext
             if (RefreshCancelSource.Token.IsCancellationRequested)
             {
                 Logger.LogI("Item refresh cancelled");
+                IsReloading = false;
+                
                 return;
             }
             
@@ -169,6 +176,8 @@ public class MenuContext
             if (RefreshCancelSource.Token.IsCancellationRequested)
             {
                 Logger.LogI("Item refresh cancelled");
+                IsReloading = false;
+                
                 return;
             }
 
@@ -196,39 +205,11 @@ public class MenuContext
                     await Task.Yield();
                 }
             });
-
-            Task.Run(() =>
-            {
-                task.Wait(RefreshCancelSource.Token);
-                RedrawMenu();
-            });
             
-            /*Task.Run(async () =>
-            {
-                foreach (CmdLabel item in Menu.Items)
-                {
-                    if (RefreshCancelSource.Token.IsCancellationRequested)
-                    {
-                        break;
-                    }
-
-                    if (!item.Data.TryGetValue("FullPath", out string? fullPath))
-                    {
-                        continue;
-                    }
-
-                    string? mime = MimeHelper.GetMimeType(fullPath);
-                    UpdateFileAttributes(item, mime, RefreshCancelSource.Token);
-
-                    if (_filesLoaded % 15 == 0)
-                    {
-                        RedrawMenu();
-                        await Task.Yield();
-                    }
-                }
-
-                RedrawMenu();
-            });*/
+            task.Wait(RefreshCancelSource.Token);
+            IsReloading = false;
+            
+            RedrawMenu();
             
             if (RefreshCancelSource.Token.IsCancellationRequested)
             {

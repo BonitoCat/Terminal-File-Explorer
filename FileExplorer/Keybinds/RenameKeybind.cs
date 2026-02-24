@@ -1,6 +1,6 @@
 using System.Text;
-using CmdMenu;
-using CmdMenu.Controls;
+using TuiLib;
+using TuiLib.Controls;
 using FileExplorer.Context;
 using LoggerLib;
 

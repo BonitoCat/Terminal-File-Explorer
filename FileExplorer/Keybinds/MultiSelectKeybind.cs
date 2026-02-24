@@ -1,6 +1,6 @@
 using System.Reflection.Emit;
-using CmdMenu;
-using CmdMenu.Controls;
+using TuiLib;
+using TuiLib.Controls;
 using FileExplorer.Context;
 
 namespace FileExplorer.Keybinds;

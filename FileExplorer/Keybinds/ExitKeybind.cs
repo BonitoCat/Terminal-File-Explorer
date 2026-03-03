@@ -4,7 +4,7 @@ using LoggerLib;
 
 namespace FileExplorer.Keybinds;
 
-public class ExitKeybind(MenuContext context) : Keybind(context)
+public class ExitKeybind(MenuContext context, List<MenuContext> contexts) : Keybind(context)
 {
     public override void OnKeyUp()
     {
@@ -12,12 +12,19 @@ public class ExitKeybind(MenuContext context) : Keybind(context)
         {
             Logger.LogI("Exit requested");
             
-            Console.CursorVisible = true;
-            Console.Clear();
+            contexts.ForEach(context =>
+            {
+                context.RefreshCancelSource.Cancel();
+                context.StopRenderLoop();
+                
+                context.Listener?.Dispose();
+                context.Listener?.WaitForDispose();
+            });
             
             InputListener.EnableEcho();
-            _context.Listener?.Dispose();
-            _context.Listener?.WaitForDispose();
+            
+            Console.CursorVisible = true;
+            Console.Clear();
             
             _context.ExitEvent.Set();
         }

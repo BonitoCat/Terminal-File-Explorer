@@ -17,7 +17,7 @@ public class TextFile
         }
         
         context.Listener.ConsumeNextKeyUp(Key.LeftCtrl);
-        context.Listener.WaitForKeyInput();
+        //context.Listener.WaitForKeyInput();
         context.Listener.RaiseEvents = false;
         
         int lines = Console.WindowHeight;

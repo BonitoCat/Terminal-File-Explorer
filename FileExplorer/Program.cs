@@ -150,10 +150,12 @@ class Program
         Logger.KeepLogs = 20;
         Logger.LogDebug = false;
         
-        Logger.CreateFile();
-        
+        Logger.CreateFile().GetAwaiter().GetResult();
+
         InputListener.Init();
         InputListener.DisableEcho();
+        
+        Logger.LogI("Initialized input listener");
         
         Clipboard.ReadPaths(out ClipboardMode mode, out string[] paths);
         ClipboardContext.Items.AddRange(paths);
@@ -180,56 +182,148 @@ class Program
         _selectedContext.Listener.ClearKeyState();
         _selectedContext.Listener.ConsumeNextKeyDown(Key.Enter);
         _selectedContext.Listener.ConsumeNextKeyUp(Key.Enter);
-
-        Task.Run(() =>
-        {
-            int consoleWidth = Console.WindowWidth;
-            int consoleHeight = Console.WindowHeight;
-            while (!_selectedContext.ExitEvent.IsSet)
-            {
-                if (consoleWidth == Console.WindowWidth && consoleHeight == Console.WindowHeight)
-                {
-                    continue;
-                }
-                
-                consoleWidth = Console.WindowWidth;
-                consoleHeight = Console.WindowHeight;
-
-                OnResize();
-            }
-        });
         
         Task.Run(() =>
         {
-            while (!_selectedContext.ExitEvent.IsSet)
+            bool wasReloading = false;
+
+            while (!ExitEvent.IsSet)
             {
                 if (_selectedContext.IsReloading)
                 {
+                    DrawThrobber();
                     Task.Delay(100).Wait();
-                    if (_selectedContext.IsReloading)
-                    {
-                        DrawThrobber();
-                    }
+                    wasReloading = true;
+                    
+                    continue;
                 }
-                else
+
+                if (wasReloading)
                 {
                     lock (OutLock)
                     {
                         Console.SetCursorPosition(0, WindowManager.Instance.MainWindow.Height - 3);
                         Console.Write($"{Color.Reset.ToAnsi()}\x1b[2K\n\x1b[2K\n\x1b[2K");
                     }
+
+                    wasReloading = false;
                 }
+
+                Task.Delay(200).Wait();
             }
         });
-
+        
         _selectedContext.RedrawMenu();
         ExitEvent.Wait();
     }
+    
+    /*private static void DrawMenu(MenuContext context)
+    {
+        List<CmdListBoxItem<CmdLabel>> viewItems = context.Menu.GetViewItems();
+
+        string BuildTopBar()
+        {
+            string cwd = $"File-Explorer ({(context.Cwd == context.BookmarkDir ? "Bookmarks" : context.Cwd)})";
+                
+            Console.SetCursorPosition(context.Menu.X, context.Menu.Y);
+            Console.Write($"\x1b[?7l{Color.Reset.ToAnsi()} ");
+                
+            int diff = Math.Max(cwd.Length - context.Menu.MaxWidth, 0);
+            string dots = new('.', Math.Min(diff + 1, 3));
+            return cwd.Length > context.Menu.MaxWidth - 1 ? dots + cwd.Substring(diff + dots.Length + 1) : cwd;
+        }
+
+        string BuildItemLine(CmdLabel item, int index)
+        {
+            StringBuilder builder = new();
+            builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
+            builder.Append(index == context.Menu.SelectedIndex ? " > " : "   ");
+
+            bool hasFullPath = item.Data.TryGetValue("FullPath", out string? fullPath);
+            bool hasDefaultColor = item.Data.TryGetValue("DefaultColor", out string? defaultColor);
+            bool hasDimmedColor = item.Data.TryGetValue("DimmedColor", out string? dimmedColor);
+            if (hasFullPath && hasDefaultColor && hasDimmedColor)
+            {
+                string ansiColor = 
+                    context != _selectedContext ||
+                    (context.ClipboardContext.Items.Contains(fullPath) && context.ClipboardContext.Mode == ClipboardMode.Cut)
+                    ? dimmedColor
+                    : defaultColor;
+                
+                item.Style.Foreground = Color.FromRgbString(ansiColor);
+            }
+            
+            if (context.SelectedItems.Contains(item))
+            {
+                builder.Append(item.Prefix);
+                builder.Append(Color.White.ToAnsi(Color.AnsiType.Background));
+                builder.Append(Color.Black.ToAnsi());
+                builder.Append(item.Text);
+                builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
+                builder.Append(item.Suffix);
+            }
+            else
+            {
+                builder.Append(item);
+            }
+
+            if (context.ShowFileSizes && context.CachedLongestFileLine != -1 && item.Data.TryGetValue("InfoSize", out string? size))
+            {
+                if (long.TryParse(size, out long sizeLong))
+                {
+                    double sizeCalc = sizeLong;
+                    int sizeType = 0;
+                    while (sizeCalc >= 1024 && sizeType < _fileSizes.Length)
+                    {
+                        sizeCalc /= 1024f;
+                        sizeType++;
+                    }
+                    
+                    int sizePos = context.CachedLongestFileLine - item.TextLength - item.SuffixLength + 5;
+                    builder.Append(index == context.Menu.SelectedIndex ? Color.White.ToAnsi() : Color.LightGray.ToAnsi());
+                    builder.Append(new string(' ', sizePos) + $"{sizeCalc.ToString("F1")} {_fileSizes[sizeType]}");
+                }
+            }
+            
+            builder.Append(new string(' ',
+                Math.Max(context.Menu.MaxWidth - Color.TrimAnsi(builder.ToString()).Length, 0)));
+            
+            return builder.ToString();
+        }
+
+        string BuildFooter(int itemCount)
+        {
+            return "";
+        }
+        
+        List<string> lines = new(viewItems.Count + 3);
+
+        string topBar = BuildTopBar();
+        lines.Add(topBar);
+
+        for (int index = 0; index < viewItems.Count; index++)
+        {
+            CmdLabel item = viewItems[index].Item;
+            string line = BuildItemLine(item, index);
+            lines.Add(line);
+        }
+
+        string footer = BuildFooter(viewItems.Count);
+        lines.Add(footer);
+
+        lock (OutLock)
+        {
+            for (int i = 0; i < lines.Count; i++)
+            {
+                Console.SetCursorPosition(context.Menu.X, context.Menu.Y + i);
+                Console.Write(lines[i]);
+            }
+        }
+    }*/
 
     private static void DrawMenu(MenuContext context)
     {
         lock (OutLock)
-        lock (context.OutLock)
         {
             void PrintTopBar()
             {
@@ -251,19 +345,6 @@ class Program
                 return;
             }
             
-            int longestLine;
-            try
-            {
-                longestLine = context.Menu
-                                     .Items
-                                     .Where(item => item.Data.TryGetValue("ItemType", out string? type) && type == "File")
-                                     .Max(item => item.Item.Length);
-            }
-            catch (InvalidOperationException)
-            {
-                longestLine = -1;
-            }
-        
             PrintTopBar();
             
             int dy = 1;
@@ -279,13 +360,13 @@ class Program
 
                    bool hasFullPath = item.Data.TryGetValue("FullPath", out string? fullPath);
                    bool hasDefaultColor = item.Data.TryGetValue("DefaultColor", out string? defaultColor);
-                   bool hasDimmedColor = item.Data.TryGetValue("DimmedColor", out string? cutColor);
+                   bool hasDimmedColor = item.Data.TryGetValue("DimmedColor", out string? dimmedColor);
                    if (hasFullPath && hasDefaultColor && hasDimmedColor)
                    {
                        string ansiColor = 
                            context != _selectedContext ||
                            (context.ClipboardContext.Items.Contains(fullPath) && context.ClipboardContext.Mode == ClipboardMode.Cut)
-                           ? cutColor
+                           ? dimmedColor
                            : defaultColor;
                        
                        item.Item.Style.Foreground = Color.FromRgbString(ansiColor);
@@ -302,10 +383,10 @@ class Program
                    }
                    else
                    {
-                       builder.Append(context.Menu.GetItemAt(i).Item);
+                       builder.Append(item.Item);
                    }
-
-                   if (context.ShowFileSizes && longestLine != -1 && item.Data.TryGetValue("InfoSize", out string? size))
+                   
+                   if (context.ShowFileSizes && context.CachedLongestFileLine != -1 && item.Data.TryGetValue("InfoSize", out string? size))
                    {
                        if (long.TryParse(size, out long sizeLong))
                        {
@@ -317,7 +398,7 @@ class Program
                                sizeType++;
                            }
                            
-                           int sizePos = longestLine - item.Item.TextLength - item.Item.SuffixLength + 5;
+                           int sizePos = context.CachedLongestFileLine - item.Item.TextLength - item.Item.SuffixLength + 5;
                            builder.Append(i == context.Menu.SelectedIndex ? Color.White.ToAnsi() : Color.LightGray.ToAnsi());
                            builder.Append(new string(' ', sizePos) + $"{sizeCalc.ToString("F1")} {_fileSizes[sizeType]}");
                        }
@@ -326,12 +407,9 @@ class Program
                    builder.Append(new string(' ',
                        Math.Max(context.Menu.MaxWidth - Color.TrimAnsi(builder.ToString()).Length, 0)));
                    
-                   lock (OutLock)
-                   {
-                       Console.SetCursorPosition(context.Menu.X, context.Menu.Y + dy);
-                       Console.Write(builder);
-                       dy++;
-                   }
+                   Console.SetCursorPosition(context.Menu.X, context.Menu.Y + dy);
+                   Console.Write(builder);
+                   dy++;
                });
             
             if (context.Menu.ViewIndex + context.Menu.ViewRange < context.Menu.GetItemCount())
@@ -387,12 +465,14 @@ class Program
             ExitEvent = ExitEvent,
             ForceTtyInput = _forceTtyInput,
         };
-
+        
         context.Listener = _forceTtyInput ? new TtyInputListener() : InputListener.New();
         if (context.Listener == null)
         {
             throw new InvalidOperationException("Could not load input listener\n");
         }
+        
+        Logger.LogI($"Created new input listener of type: {context.Listener.GetType()}");
         
         context.Listener.PauseListening = true;
         context.Listener.RaiseEvents = false;
@@ -421,6 +501,8 @@ class Program
                 DrawMenu(context);
             }
         };
+        
+        context.StartRenderLoop();
         
         Logger.LogI("Created new menu");
 
@@ -525,7 +607,7 @@ class Program
         
         _keybinds.Add(new HelpKeybind(context, _helpStr) { Keys = [Key.F1] });
         _keybinds.Add(new RenameKeybind(context) { Keys = [Key.F2] });
-        _keybinds.Add(new ExitKeybind(context) { Keys = [Key.F10] });
+        _keybinds.Add(new ExitKeybind(context, _contexts) { Keys = [Key.F10] });
         
         _keybinds.Add(new CreateMenuKeybind(context, () =>
         {

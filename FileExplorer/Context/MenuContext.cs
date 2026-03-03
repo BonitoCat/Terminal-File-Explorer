@@ -33,6 +33,7 @@ public class MenuContext
     public List<CmdListBoxItem<CmdLabel>> SelectedItems { get; } = new();
     public CancellationTokenSource RefreshCancelSource { get; set; } = new();
     public bool CanDraw { get; private set; } = true;
+    public int CachedLongestFileLine { get; set; } = -1;
     public bool IsReloading { get; private set; }
     public string Cwd { get; set; } = "/";
     public required object OutLock { get; set; }
@@ -41,9 +42,9 @@ public class MenuContext
     public required bool ForceTtyInput { get; init; }
     
     private Timer? _cwdTimer;
-    private int _foldersLoaded;
-    private int _filesLoaded;
     private int _redrawPending;
+
+    private Task _refreshTask;
 
     private static readonly Regex AnsiRegex =
         new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])",
@@ -52,14 +53,24 @@ public class MenuContext
     public void RefreshItems()
     {
         Logger.LogI("Refreshing items...");
-        
+
+        CancellationTokenSource? oldSource = RefreshCancelSource;
+        if (oldSource != null)
+        {
+            oldSource.Cancel();
+            oldSource.Dispose();
+        }
+
+        CancellationTokenSource cts = new CancellationTokenSource();
+        RefreshCancelSource = cts;
+        CancellationToken token = cts.Token;
+
+        Task? oldTask = _refreshTask;
+
         SelectedItems.Clear();
         Menu.ClearItems();
-
-        RefreshCancelSource.Cancel();
-        RefreshCancelSource = new();
         
-        Task.Run(() =>
+        _refreshTask = Task.Run(() =>
         {
             lock (OutLock)
             {
@@ -89,9 +100,13 @@ public class MenuContext
             }
 
             NaturalStringComparer naturalComparer = new();
+            Stopwatch stopwatch = new();
+            stopwatch.Start();
             
             List<string> dirPaths = Directory.EnumerateDirectories(cwd, "*", SearchOption.TopDirectoryOnly).ToList();
             dirPaths.Sort();
+
+            Logger.LogI($"Directories enumerated in: {stopwatch.ElapsedMilliseconds} ms");
 
             Menu.AddItemRange(
                 dirPaths
@@ -108,10 +123,12 @@ public class MenuContext
                             {
                                 {"ItemType", "Folder"},
                                 {"FullPath", dirPath},
+                                {"DestinationPath", dirPath},
                                 {"DefaultColor", Blue},
                                 {"DimmedColor", DarkBlue},
                             },
                         };
+                        lbItem.OnClick += () => OnClickDir(new CmdLabel(dirPath));
 
                         return lbItem;
                     })
@@ -121,8 +138,11 @@ public class MenuContext
                     .OrderBy(item => item.Item.Text.StartsWith('.'))
                     .ThenBy(item => item.Item.Text, naturalComparer)
                     .ToList());
+            
+            Logger.LogI($"Directories added to menu in: {stopwatch.ElapsedMilliseconds}ms");
+            RedrawMenu();
 
-            if (RefreshCancelSource.Token.IsCancellationRequested)
+            if (token.IsCancellationRequested)
             {
                 Logger.LogI("Item refresh cancelled");
                 IsReloading = false;
@@ -130,23 +150,49 @@ public class MenuContext
                 return;
             }
             
-            RedrawMenu();
+            ParallelOptions folderOptions = new()
+            {
+                CancellationToken = token,
+                MaxDegreeOfParallelism = 2,
+            };
 
-            _foldersLoaded = 0;
-            Menu.Items.ToList().ForEach(item => UpdateFolderAttributes(item, RefreshCancelSource.Token));
+            int foldersLoaded = 0;
+            Interlocked.Exchange(ref foldersLoaded, 0);
             
-            if (RefreshCancelSource.Token.IsCancellationRequested)
+            Parallel.ForEach(Menu.Items.ToList().Skip(1), folderOptions, item =>
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return;
+                }
+                
+                UpdateFolderAttributes(item, token);
+                
+                Interlocked.Increment(ref foldersLoaded);
+                if (foldersLoaded > 30)
+                {
+                    RedrawMenu();
+                    Interlocked.Exchange(ref foldersLoaded, 0);
+
+                    Thread.Sleep(1);
+                }
+            });
+            
+            Logger.LogI($"Updated directory attributes in: {stopwatch.ElapsedMilliseconds}ms");
+            RedrawMenu();
+            
+            if (token.IsCancellationRequested)
             {
                 Logger.LogI("Item refresh cancelled");
                 IsReloading = false;
                 
                 return;
             }
-            
-            RedrawMenu();
             
             List<string> fileNames = Directory.EnumerateFiles(cwd, "*", SearchOption.TopDirectoryOnly).ToList();
             fileNames.Sort();
+            
+            Logger.LogI($"Files enumerated in: {stopwatch.ElapsedMilliseconds}ms");
 
             Menu.AddItemRange(
                 fileNames
@@ -173,45 +219,52 @@ public class MenuContext
                     .ThenBy(item => item.Item.Text, naturalComparer)
                     .ToList());
             
-            if (RefreshCancelSource.Token.IsCancellationRequested)
+            Logger.LogI($"Files added to menu in: {stopwatch.ElapsedMilliseconds}ms");
+            RedrawMenu();
+            
+            if (token.IsCancellationRequested)
             {
                 Logger.LogI("Item refresh cancelled");
                 IsReloading = false;
                 
                 return;
             }
-
-            RedrawMenu();
             
-            _filesLoaded = 0;
-            Task task = Parallel.ForEachAsync(Menu.Items, async (item, token) =>
+            ParallelOptions fileOptions = new()
             {
-                if (RefreshCancelSource.Token.IsCancellationRequested)
-                {
-                    return;
-                }
-                
+                CancellationToken = token,
+                MaxDegreeOfParallelism = 2,
+            };
+            
+            int filesLoaded = 0;
+            Interlocked.Exchange(ref filesLoaded, 0);
+
+            Parallel.ForEach(Menu.Items.ToList().Skip(1), fileOptions, item =>
+            {
                 if (!item.Data.TryGetValue("FullPath", out string? fullPath))
                 {
                     return;
                 }
 
-                string? mime = MimeHelper.GetMimeType(fullPath);
-                UpdateFileAttributes(item, mime, RefreshCancelSource.Token);
-
-                if (_filesLoaded % 15 == 0)
+                string? mime = MimeHelper.GetMimeTypeFast(fullPath);
+                UpdateFileAttributesFast(item, mime, token);
+                
+                Interlocked.Increment(ref filesLoaded);
+                if (filesLoaded > 100)
                 {
                     RedrawMenu();
-                    await Task.Yield();
+                    Interlocked.Exchange(ref filesLoaded, 0);
+
+                    Thread.Sleep(1);
                 }
             });
             
-            task.Wait(RefreshCancelSource.Token);
-            IsReloading = false;
+            Logger.LogI($"Updated file attributes in: {stopwatch.ElapsedMilliseconds}ms");
             
+            IsReloading = false;
             RedrawMenu();
             
-            if (RefreshCancelSource.Token.IsCancellationRequested)
+            if (token.IsCancellationRequested)
             {
                 Logger.LogI("Item refresh cancelled");
                 return;
@@ -223,22 +276,23 @@ public class MenuContext
                 RefreshItems();
             }
             
-            if (Menu.SelectedIndex >= Menu.GetItemCount() && !RefreshCancelSource.Token.IsCancellationRequested)
+            if (Menu.SelectedIndex >= Menu.GetItemCount() && !token.IsCancellationRequested)
             {
                 Menu.SelectedIndex = Menu.GetItemCount() - 1;
                 Menu.ViewIndex = Math.Max(Menu.GetItemCount() - Menu.ViewRange, 0);
             }
             
-            if (RefreshCancelSource.Token.IsCancellationRequested)
+            if (token.IsCancellationRequested)
             {
                 Logger.LogI("Item refresh cancelled");
                 return;
             }
             
-            Logger.LogI($"Items refreshed, found items: {Menu.GetItemCount()}");
+            Logger.LogI($"Items refreshed, found items: {Menu.GetItemCount()} in {stopwatch.ElapsedMilliseconds}ms");
+            stopwatch.Stop();
             
             RedrawMenu();
-        }, RefreshCancelSource.Token);
+        }, token);
     }
     
     public void UpdateFolderAttributes(CmdListBoxItem<CmdLabel> dir, CancellationToken token)
@@ -267,10 +321,7 @@ public class MenuContext
         if (RequiresElevatedAccess(dirName) && Environment.UserName != "root")
         {
             dir.Item.Suffix += $"{Color.Orange.ToAnsi()} (Access Denied)";
-        }
-        else
-        {
-            dir.OnClick += () => OnClickDir(dir.Item);
+            dir.OnClick -= () => OnClickDir(dir.Item);
         }
         
         FileAttributes attributes = new DirectoryInfo(dirName).Attributes;
@@ -279,18 +330,9 @@ public class MenuContext
             dir.Data.TryAdd("InfoHidden", "Hidden");
             dir.Item.Suffix += $"{Color.Gray.ToAnsi()} (Hidden)";
         }
-
-        if (_foldersLoaded > 30)
-        {
-            RedrawMenu();
-            
-            _foldersLoaded = 0;
-        }
-
-        _foldersLoaded++;
     }
 
-    public void UpdateFileAttributes(CmdListBoxItem<CmdLabel> file, string? mime, CancellationToken token)
+    public void UpdateFileAttributesFast(CmdListBoxItem<CmdLabel> file, string? mime, CancellationToken token)
     {
         if (token.IsCancellationRequested)
         {
@@ -301,20 +343,146 @@ public class MenuContext
         {
             return;
         }
-
-        string fileName = file.Item.Text;
+        
+        string defaultColor = Color.White.ToRgbString();
+        string dimmedColor = Color.LightGray.ToRgbString();
+        
         if (mime == null)
         {
-            file.Data.TryAdd("DefaultColor", Color.White.ToRgbString());
-            file.Data.TryAdd("DimmedColor", Color.LightGray.ToRgbString());
-            
-            file.OnClick += () => TextFile.OnClick(this, file.Item);
+            if (ExecutableFile.IsExecutable(file.Item.Text))
+            {
+                file.Item.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
+                file.Item.Style.Foreground = Color.FromRgbString(Green);
+                
+                defaultColor = Green;
+                dimmedColor = DarkGreen;
+                
+                file.Data.TryAdd("FileType", "Executable");
+            }
+            else if (ArchiveFile.IsArchive(file.Item.Text))
+            {
+                Color color = Color.Orange.Transform(-50, -20, -20);
+                file.Item.Prefix = $"{color.ToAnsi()}\x1b[1m🗀  \x1b[0m";
+                file.Item.Style.Foreground = color;
+                
+                defaultColor = color.ToRgbString();
+                dimmedColor = color.Transform(-40, -70, -50).ToRgbString();
+                
+                file.Data.TryAdd("FileType", "Archive");
+            }
         }
         else if (mime.StartsWith("text/"))
         {
-            file.Data.TryAdd("DefaultColor", Color.White.ToRgbString());
-            file.Data.TryAdd("DimmedColor", Color.LightGray.ToRgbString());
+        }
+        else if (mime.StartsWith("image/"))
+        {
+            file.Item.Prefix = $"{Color.Yellow.ToAnsi()}\x1b[1m🖼  \x1b[0m";
+            file.Item.Style.Foreground = Color.Yellow;
             
+            defaultColor = Color.Yellow.ToRgbString();
+            dimmedColor = Color.Yellow.Transform(-70, -90, -40).ToRgbString();
+            
+            file.Data.TryAdd("FileType", "Image");
+        }
+        else if (mime.StartsWith("video/"))
+        {
+            file.Item.Prefix = $"{Color.Orange.ToAnsi()}\x1b[1m🎞  \x1b[0m";
+            file.Item.Style.Foreground = Color.Orange;
+            
+            defaultColor = Color.Orange.ToRgbString();
+            dimmedColor = Color.Orange.Transform(-40, -70, -50).ToRgbString();
+            
+            file.Data.TryAdd("FileType", "Video");
+        }
+        else if (mime.StartsWith("audio/"))
+        {
+            file.Item.Prefix = $"{Color.FromRgbString(Red).ToAnsi()}\x1b[1m♪  \x1b[0m";
+            file.Item.Style.Foreground = Color.FromRgbString(Red);
+            
+            defaultColor = Color.Red.ToRgbString();
+            dimmedColor = Color.Red.Transform(-40, -40, -20).ToRgbString();
+            
+            file.Data.TryAdd("FileType", "Audio");
+        }
+        else if (mime == "application/vnd.debian.binary-package")
+        {
+            Color color = Color.Yellow.Transform(-20, -20, -20);
+            file.Item.Prefix = $"{color.ToAnsi()}\x1b[1mᐅ  \x1b[0m";
+            file.Item.Style.Foreground = color;
+            
+            defaultColor = color.ToRgbString();
+            dimmedColor = color.Transform(-70, -90, -40).ToRgbString();
+            
+            file.Data.TryAdd("FileType", "Deb");
+        }
+        
+        file.Data["DefaultColor"] = defaultColor;
+        file.Data["DimmedColor"] = dimmedColor;
+        
+        void OnClick()
+        {
+            file.OnClick -= OnClick;
+            
+            UpdateFileAttributesAccurate(file, MimeHelper.GetMimeTypeAccurate(file.Item.Text));
+            file.CallOnClick();
+        }
+        
+        file.OnClick += OnClick;
+        
+        string fileName = file.Item.Text;
+        FileAttributes attributes = File.GetAttributes(fileName);
+        
+        if (attributes.HasFlag(FileAttributes.Hidden))
+        {
+            file.Data["InfoHidden"] = "Hidden";
+            file.Item.Suffix += $"{Color.Gray.ToAnsi()} (Hidden)";
+        }
+
+        FileInfo info = new(fileName);
+        file.Data["InfoSize"] = info.Length.ToString();
+        
+        CachedLongestFileLine = Math.Max(file.Item.Length, CachedLongestFileLine);
+    }
+
+    public void UpdateFileAttributesAccurate(CmdListBoxItem<CmdLabel> file, string? mime)
+    {
+        if (!file.Data.TryGetValue("ItemType", out string? fileType) || fileType != "File")
+        {
+            return;
+        }
+
+        string defaultColor = Color.White.ToRgbString();
+        string dimmedColor = Color.LightGray.ToRgbString();
+        string fileName = file.Item.Text;
+        
+        if (mime == null)
+        {
+            if (ExecutableFile.IsExecutable(file.Item.Text))
+            {
+                file.Item.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
+                file.Item.Style.Foreground = Color.FromRgbString(Green);
+                
+                defaultColor = Green;
+                dimmedColor = DarkGreen;
+                
+                file.Data.TryAdd("FileType", "Executable");
+                file.OnClick += () => ExecutableFile.OnClick(this, fileName);
+            }
+            else if (ArchiveFile.IsArchive(file.Item.Text))
+            {
+                Color color = Color.Orange.Transform(-50, -20, -20);
+                file.Item.Prefix = $"{color.ToAnsi()}\x1b[1m🗀  \x1b[0m";
+                file.Item.Style.Foreground = color;
+                
+                defaultColor = color.ToRgbString();
+                dimmedColor = color.Transform(-40, -70, -50).ToRgbString();
+                
+                file.Data.TryAdd("FileType", "Archive");
+                file.OnClick += () => ArchiveFile.OnClick(this, fileName);
+            }
+        }
+        else if (mime.StartsWith("text/"))
+        {
             file.OnClick += XdgOpen;
         }
         else if (mime.StartsWith("image/"))
@@ -322,7 +490,7 @@ public class MenuContext
             file.Item.Prefix = $"{Color.Yellow.ToAnsi()}\x1b[1m🖼  \x1b[0m";
             file.Item.Style.Foreground = Color.Yellow;
             
-            file.Data.TryAdd("DefaultColor", Color.Yellow.ToRgbString());
+            defaultColor = Color.Yellow.ToRgbString();
             file.Data.TryAdd("DimmedColor", Color.Yellow.Transform(-70, -90, -40).ToRgbString());
             
             file.Data.TryAdd("FileType", "Image");
@@ -333,8 +501,8 @@ public class MenuContext
             file.Item.Prefix = $"{Color.Orange.ToAnsi()}\x1b[1m🎞  \x1b[0m";
             file.Item.Style.Foreground = Color.Orange;
             
-            file.Data.TryAdd("DefaultColor", Color.Orange.ToRgbString());
-            file.Data.TryAdd("DimmedColor", Color.Orange.Transform(-40, -70, -50).ToRgbString());
+            defaultColor = Color.Orange.ToRgbString();
+            dimmedColor = Color.Orange.Transform(-40, -70, -50).ToRgbString();
             
             file.Data.TryAdd("FileType", "Video");
             file.OnClick += XdgOpen;
@@ -344,8 +512,8 @@ public class MenuContext
             file.Item.Prefix = $"{Color.FromRgbString(Red).ToAnsi()}\x1b[1m♪  \x1b[0m";
             file.Item.Style.Foreground = Color.FromRgbString(Red);
             
-            file.Data.TryAdd("DefaultColor", Color.Red.ToRgbString());
-            file.Data.TryAdd("DimmedColor", Color.Red.Transform(-40, -40, -20).ToRgbString());
+            defaultColor = Color.Red.ToRgbString();
+            dimmedColor = Color.Red.Transform(-40, -40, -20).ToRgbString();
             
             file.Data.TryAdd("FileType", "Audio");
             file.OnClick += XdgOpen;
@@ -356,30 +524,30 @@ public class MenuContext
             file.Item.Prefix = $"{color.ToAnsi()}\x1b[1mᐅ  \x1b[0m";
             file.Item.Style.Foreground = color;
             
-            file.Data.TryAdd("DefaultColor", color.ToRgbString());
-            file.Data.TryAdd("DimmedColor", color.Transform(-70, -90, -40).ToRgbString());
+            defaultColor = color.ToRgbString();
+            dimmedColor = color.Transform(-70, -90, -40).ToRgbString();
             
             file.Data.TryAdd("FileType", "Deb");
             file.OnClick += XdgOpen;
         }
-        else if (ExecutableFile.IsExecutable(file.Item.Text))
+        else if (mime.StartsWith("application/x-pie-executable"))
         {
             file.Item.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
             file.Item.Style.Foreground = Color.FromRgbString(Green);
-            
-            file.Data.TryAdd("DefaultColor", Green);
-            file.Data.TryAdd("DimmedColor", DarkGreen);
-            
+                
+            defaultColor = Green;
+            dimmedColor = DarkGreen;
+                
             file.Data.TryAdd("FileType", "Executable");
-            file.OnClick += () => ExecutableFile.OnClick(this, file.Item);
+            file.OnClick += () => ExecutableFile.OnClick(this, fileName);
         }
         else
         {
-            file.Data.TryAdd("DefaultColor", Color.White.ToRgbString());
-            file.Data.TryAdd("DimmedColor", Color.LightGray.ToRgbString());
-            
             file.OnClick += XdgOpen;
         }
+        
+        file.Data["DefaultColor"] = defaultColor;
+        file.Data["DimmedColor"] = dimmedColor;
         
         FileAttributes attributes = File.GetAttributes(fileName);
         if (attributes.HasFlag(FileAttributes.Hidden))
@@ -391,13 +559,6 @@ public class MenuContext
         FileInfo info = new(fileName);
         file.Data.TryAdd("InfoSize", info.Length.ToString());
         
-        if (_filesLoaded > 30)
-        {
-            RedrawMenu();
-            _filesLoaded = 0;
-        }
-
-        _filesLoaded++;
         return;
 
         void XdgOpen()
@@ -421,6 +582,80 @@ public class MenuContext
             proc.Start();
         }
     }
+    
+    private volatile int _dirty;
+    private readonly AutoResetEvent _renderSignal = new(false);
+
+    private CancellationTokenSource? _renderCts;
+    private Task? _renderTask;
+
+    public void StartRenderLoop()
+    {
+        if (_renderTask != null)
+        {
+            return;
+        }
+
+        _renderCts = new CancellationTokenSource();
+        CancellationToken token = _renderCts.Token;
+
+        _renderTask = Task.Factory.StartNew(() =>
+        {
+            Stopwatch frameTimer = Stopwatch.StartNew();
+            long lastFrameMs = 0;
+            const int frameMs = 16;
+
+            while (!token.IsCancellationRequested)
+            {
+                _renderSignal.WaitOne();
+
+                if (token.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                if (!CanDraw)
+                {
+                    continue;
+                }
+
+                if (Interlocked.Exchange(ref _dirty, 0) == 0)
+                {
+                    continue;
+                }
+
+                long now = frameTimer.ElapsedMilliseconds;
+                long elapsedSinceLast = now - lastFrameMs;
+                if (elapsedSinceLast < frameMs)
+                {
+                    Thread.Sleep((int) (frameMs - elapsedSinceLast));
+                }
+
+                try
+                {
+                    Menu.MenuUpdate.Invoke();
+                }
+                catch { }
+
+                lastFrameMs = frameTimer.ElapsedMilliseconds;
+
+                if (Volatile.Read(ref _dirty) != 0)
+                {
+                    _renderSignal.Set();
+                }
+            }
+        }, token, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+    }
+
+    public void StopRenderLoop()
+    {
+        _renderCts?.Cancel();
+        _renderSignal.Set();
+
+        _renderCts?.Dispose();
+        _renderCts = null;
+        _renderTask = null;
+    }
 
     public void RedrawMenu()
     {
@@ -428,17 +663,9 @@ public class MenuContext
         {
             return;
         }
-        
-        if (Interlocked.Exchange(ref _redrawPending, 1) == 1)
-        {
-            return;
-        }
 
-        Task.Run(() =>
-        {
-            Menu.MenuUpdate.Invoke();
-            Interlocked.Exchange(ref _redrawPending, 0);
-        });
+        Interlocked.Exchange(ref _dirty, 1);
+        _renderSignal.Set();
     }
 
     public void DisableDrawing()
@@ -455,13 +682,6 @@ public class MenuContext
     
     public void OnClickDir(CmdLabel sender, bool saveToHistory = true)
     {
-        SearchString = null;
-        lock (Menu.Lock)
-        {
-            Console.Clear();
-            Logger.LogI("Clearing screen");
-        }
-
         try
         {
             Cwd = Directory.GetCurrentDirectory();
@@ -480,6 +700,19 @@ public class MenuContext
         {
             Logger.LogE("Clicked directory not found");
             return;
+        }
+
+        if (RequiresElevatedAccess(sender.Text))
+        {
+            Logger.LogE("Clicked directory requires higher privileges");
+            return;
+        }
+        
+        SearchString = null;
+        lock (OutLock)
+        {
+            Console.Clear();
+            Logger.LogI("Clearing screen");
         }
         
         if (saveToHistory && Cwd != BookmarkDir)
@@ -504,7 +737,7 @@ public class MenuContext
             ParentWatcher.NotifyFilter = NotifyFilters.DirectoryName;
             
             string currentDir = Cwd;
-            ParentWatcher.Deleted += (obj, e) =>
+            ParentWatcher.Deleted += (_, _) =>
             {
                 bool currDirExists;
                 try
@@ -537,7 +770,7 @@ public class MenuContext
             };
         }
         
-        FileWatcher.Deleted += (obj, e) =>
+        FileWatcher.Deleted += (_, e) =>
         {
             CmdListBoxItem<CmdLabel>? item = Menu.Items.FirstOrDefault(item => item.Item.Text == e.Name);
             if (item != null)
@@ -562,13 +795,13 @@ public class MenuContext
             RedrawMenu();
         };
 
-        FileWatcher.Renamed += (obj, e) =>
+        FileWatcher.Renamed += (_, e) =>
         {
             CmdListBoxItem<CmdLabel>? item = Menu.Items.FirstOrDefault(item => item.Item.Text == e.OldName);
             if (item != null)
             {
                 item.Item.Text = e.Name ?? item.Item.Text;
-                Menu.MenuUpdate.Invoke();
+                RedrawMenu();
             }
         };
 
@@ -627,20 +860,24 @@ public class MenuContext
         {
             if (File.Exists(path))
             {
-                using FileStream stream = File.Open(path, FileMode.Open, FileAccess.Read);
+                using FileStream stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                return false;
             }
-            else if (Directory.Exists(path))
+
+            if (Directory.Exists(path))
             {
-                Directory.GetFiles(path);
+                using IEnumerator<string> e = Directory.EnumerateFileSystemEntries(path).GetEnumerator();
+                e.MoveNext();
             }
 
             return false;
         }
         catch (UnauthorizedAccessException)
         {
+            Logger.LogI("Directory access denied");
             return true;
         }
-        catch (Exception)
+        catch
         {
             return false;
         }
@@ -657,6 +894,8 @@ public class MenuContext
             Listener?.StartListening();
             return "";
         }
+        
+        Logger.LogI($"Created new input listener of type: {keyListener.GetType()}");
         
         Console.CursorVisible = true;
         

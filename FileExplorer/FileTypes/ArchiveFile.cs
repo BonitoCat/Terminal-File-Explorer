@@ -15,12 +15,19 @@ public static class ArchiveFile
         lock (context.OutLock)
         {
             Console.CursorVisible = true;
-            string? input = "";
-            
-            while (input != null && input != "y" && input != "n")
+            string? input;
+
+            do
             {
-                input = context.Input($"\x1b[2K\r{Color.Reset.ToAnsi()} Do you want to extract the content of '{sender.Text}'? [Y/n]: ", escapeNo: true)?.Trim();
-            }
+                input = context.Input(
+                    $"\x1b[2K\r{Color.Reset.ToAnsi()} Do you want to extract the content of '{sender.Text}'? [Y/n]: ",
+                    enterNull: true, escapeNo: true)?.Trim();
+
+                if (input == null)
+                {
+                    break;
+                }
+            } while (input != "y" && input != "n");
             
             Console.CursorVisible = false;
             if (input == "n")

@@ -88,7 +88,7 @@ class Program
     private static string? _startDir;
     private static bool _forceTtyInput;
 
-    private static int _throbberIndex = 0;
+    private static int _throbberIndex;
     
     public static void Main(string[] args)
     {
@@ -217,110 +217,6 @@ class Program
         ExitEvent.Wait();
     }
     
-    /*private static void DrawMenu(MenuContext context)
-    {
-        List<CmdListBoxItem<CmdLabel>> viewItems = context.Menu.GetViewItems();
-
-        string BuildTopBar()
-        {
-            string cwd = $"File-Explorer ({(context.Cwd == context.BookmarkDir ? "Bookmarks" : context.Cwd)})";
-                
-            Console.SetCursorPosition(context.Menu.X, context.Menu.Y);
-            Console.Write($"\x1b[?7l{Color.Reset.ToAnsi()} ");
-                
-            int diff = Math.Max(cwd.Length - context.Menu.MaxWidth, 0);
-            string dots = new('.', Math.Min(diff + 1, 3));
-            return cwd.Length > context.Menu.MaxWidth - 1 ? dots + cwd.Substring(diff + dots.Length + 1) : cwd;
-        }
-
-        string BuildItemLine(CmdLabel item, int index)
-        {
-            StringBuilder builder = new();
-            builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
-            builder.Append(index == context.Menu.SelectedIndex ? " > " : "   ");
-
-            bool hasFullPath = item.Data.TryGetValue("FullPath", out string? fullPath);
-            bool hasDefaultColor = item.Data.TryGetValue("DefaultColor", out string? defaultColor);
-            bool hasDimmedColor = item.Data.TryGetValue("DimmedColor", out string? dimmedColor);
-            if (hasFullPath && hasDefaultColor && hasDimmedColor)
-            {
-                string ansiColor = 
-                    context != _selectedContext ||
-                    (context.ClipboardContext.Items.Contains(fullPath) && context.ClipboardContext.Mode == ClipboardMode.Cut)
-                    ? dimmedColor
-                    : defaultColor;
-                
-                item.Style.Foreground = Color.FromRgbString(ansiColor);
-            }
-            
-            if (context.SelectedItems.Contains(item))
-            {
-                builder.Append(item.Prefix);
-                builder.Append(Color.White.ToAnsi(Color.AnsiType.Background));
-                builder.Append(Color.Black.ToAnsi());
-                builder.Append(item.Text);
-                builder.Append(Color.Reset.ToAnsi(Color.AnsiType.Both));
-                builder.Append(item.Suffix);
-            }
-            else
-            {
-                builder.Append(item);
-            }
-
-            if (context.ShowFileSizes && context.CachedLongestFileLine != -1 && item.Data.TryGetValue("InfoSize", out string? size))
-            {
-                if (long.TryParse(size, out long sizeLong))
-                {
-                    double sizeCalc = sizeLong;
-                    int sizeType = 0;
-                    while (sizeCalc >= 1024 && sizeType < _fileSizes.Length)
-                    {
-                        sizeCalc /= 1024f;
-                        sizeType++;
-                    }
-                    
-                    int sizePos = context.CachedLongestFileLine - item.TextLength - item.SuffixLength + 5;
-                    builder.Append(index == context.Menu.SelectedIndex ? Color.White.ToAnsi() : Color.LightGray.ToAnsi());
-                    builder.Append(new string(' ', sizePos) + $"{sizeCalc.ToString("F1")} {_fileSizes[sizeType]}");
-                }
-            }
-            
-            builder.Append(new string(' ',
-                Math.Max(context.Menu.MaxWidth - Color.TrimAnsi(builder.ToString()).Length, 0)));
-            
-            return builder.ToString();
-        }
-
-        string BuildFooter(int itemCount)
-        {
-            return "";
-        }
-        
-        List<string> lines = new(viewItems.Count + 3);
-
-        string topBar = BuildTopBar();
-        lines.Add(topBar);
-
-        for (int index = 0; index < viewItems.Count; index++)
-        {
-            CmdLabel item = viewItems[index].Item;
-            string line = BuildItemLine(item, index);
-            lines.Add(line);
-        }
-
-        string footer = BuildFooter(viewItems.Count);
-        lines.Add(footer);
-
-        lock (OutLock)
-        {
-            for (int i = 0; i < lines.Count; i++)
-            {
-                Console.SetCursorPosition(context.Menu.X, context.Menu.Y + i);
-                Console.Write(lines[i]);
-            }
-        }
-    }*/
-
     private static void DrawMenu(MenuContext context)
     {
         lock (OutLock)
@@ -528,12 +424,21 @@ class Program
 
     private static void SwitchContext(int dir)
     {
+        int prevIndex = _selectedContextIndex;
+        int newIndex = Math.Clamp(_selectedContextIndex + dir, 0, _contexts.Count - 1);
+        
+        if (dir != 0 && newIndex == prevIndex)
+        {
+            return;
+        }
+        
         _contexts.ForEach(context =>
         {
             context.Listener.PauseListening = true;
             context.Listener.RaiseEvents = false;
         });
-        _selectedContextIndex = Math.Clamp(_selectedContextIndex + dir, 0, _contexts.Count - 1);
+
+        _selectedContextIndex = newIndex;
         MapKeybinds(_selectedContext);
         
         _selectedContext.Listener.PauseListening = false;

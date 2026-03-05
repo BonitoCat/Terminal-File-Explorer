@@ -25,7 +25,7 @@ public class DeleteKeybind(MenuContext context) : Keybind(context)
                     do
                     {
                         input = _context.Input(
-                                $"\x1b[2K{Color.Reset.ToAnsi()} Are you sure you want to move {_context.SelectedItems.Count} items to the recycle bin? [Y/n]: ",
+                                $"\x1b[2K{Color.Reset.ToAnsi()} Move {_context.SelectedItems.Count} items to the recycle bin? [Y/n]: ",
                                 enterNull: true,
                                 escapeNo: true
                             )?.Trim().ToLower();
@@ -64,7 +64,7 @@ public class DeleteKeybind(MenuContext context) : Keybind(context)
                     do
                     {
                         input = _context.Input(
-                                $"\x1b[2K{Color.Reset.ToAnsi()} Are you sure you want to move '{item.Item.Text}' to the recycle bin? [Y/n]: ",
+                                $"\x1b[2K{Color.Reset.ToAnsi()} Move '{item.Item.Text}' to the recycle bin? [Y/n]: ",
                                 enterNull: true,
                                 escapeNo: true
                             )?.Trim().ToLower();
@@ -87,28 +87,33 @@ public class DeleteKeybind(MenuContext context) : Keybind(context)
             {
                 foreach (string item in items.Select(item => item.Text))
                 {
-                    if (Directory.Exists(item))
+                    if (Directory.Exists(item) || File.Exists(item))
                     {
                         List<string> tempHistory = new(_context.DirHistory);
                         tempHistory = tempHistory.Where(path => !path.Contains(Path.GetFullPath(item))).ToList();
 
                         _context.DirHistory = new(tempHistory);
-                        
-                        ProcessStartInfo startInfo = new()
-                        {
-                            FileName = "gio",
-                            Arguments = $"trash \"{item}\"",
-                            RedirectStandardInput = true,
-                            RedirectStandardOutput = true,
-                            RedirectStandardError = true
-                        };
-                    
-                        Process proc = new();
-                        proc.StartInfo = startInfo;
-                    
-                        proc.Start();
-                        proc.WaitForExit();
                     }
+                    else if (File.Exists(item)) {}
+                    else
+                    {
+                        continue;
+                    }
+                    
+                    ProcessStartInfo startInfo = new()
+                    {
+                        FileName = "gio",
+                        Arguments = $"trash \"{item}\"",
+                        RedirectStandardInput = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                    };
+                    
+                    Process proc = new();
+                    proc.StartInfo = startInfo;
+                    
+                    proc.Start();
+                    proc.WaitForExit();
                 }
                 
                 Logger.LogI($"Moved {_context.SelectedItems.Count} items to the recycle bin");

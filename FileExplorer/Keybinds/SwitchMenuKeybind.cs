@@ -6,7 +6,7 @@ namespace FileExplorer.Keybinds;
 
 public class SwitchMenuKeybind(MenuContext context, int dir, Action<int> callback) : Keybind(context)
 {
-    public override void OnKeyDown(KeyDownEventArgs e)
+    public override void OnKeyUp()
     {
         Logger.LogI("Menu switch requested");
         callback.Invoke(dir);

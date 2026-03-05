@@ -42,9 +42,11 @@ public class MenuContext
     public required bool ForceTtyInput { get; init; }
     
     private Timer? _cwdTimer;
-    private int _redrawPending;
-
-    private Task _refreshTask;
+    
+    private volatile int _dirty;
+    private readonly AutoResetEvent _renderSignal = new(false);
+    private CancellationTokenSource? _renderCts;
+    private Task? _renderTask;
 
     private static readonly Regex AnsiRegex =
         new(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])",
@@ -61,16 +63,14 @@ public class MenuContext
             oldSource.Dispose();
         }
 
-        CancellationTokenSource cts = new CancellationTokenSource();
+        CancellationTokenSource cts = new();
         RefreshCancelSource = cts;
         CancellationToken token = cts.Token;
-
-        Task? oldTask = _refreshTask;
 
         SelectedItems.Clear();
         Menu.ClearItems();
         
-        _refreshTask = Task.Run(() =>
+        Task.Run(() =>
         {
             lock (OutLock)
             {
@@ -347,19 +347,19 @@ public class MenuContext
         string defaultColor = Color.White.ToRgbString();
         string dimmedColor = Color.LightGray.ToRgbString();
         
-        if (mime == null)
+        if (ExecutableFile.IsExecutable(file.Item.Text))
         {
-            if (ExecutableFile.IsExecutable(file.Item.Text))
-            {
-                file.Item.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
-                file.Item.Style.Foreground = Color.FromRgbString(Green);
+            file.Item.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
+            file.Item.Style.Foreground = Color.FromRgbString(Green);
                 
-                defaultColor = Green;
-                dimmedColor = DarkGreen;
+            defaultColor = Green;
+            dimmedColor = DarkGreen;
                 
-                file.Data.TryAdd("FileType", "Executable");
-            }
-            else if (ArchiveFile.IsArchive(file.Item.Text))
+            file.Data.TryAdd("FileType", "Executable");
+        }
+        else if (mime == null)
+        {
+            if (ArchiveFile.IsArchive(file.Item.Text))
             {
                 Color color = Color.Orange.Transform(-50, -20, -20);
                 file.Item.Prefix = $"{color.ToAnsi()}\x1b[1m🗀  \x1b[0m";
@@ -455,20 +455,20 @@ public class MenuContext
         string dimmedColor = Color.LightGray.ToRgbString();
         string fileName = file.Item.Text;
         
+        if (ExecutableFile.IsExecutable(file.Item.Text))
+        {
+            file.Item.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
+            file.Item.Style.Foreground = Color.FromRgbString(Green);
+                
+            defaultColor = Green;
+            dimmedColor = DarkGreen;
+                
+            file.Data.TryAdd("FileType", "Executable");
+            file.OnClick += () => ExecutableFile.OnClick(this, fileName);
+        }
         if (mime == null)
         {
-            if (ExecutableFile.IsExecutable(file.Item.Text))
-            {
-                file.Item.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
-                file.Item.Style.Foreground = Color.FromRgbString(Green);
-                
-                defaultColor = Green;
-                dimmedColor = DarkGreen;
-                
-                file.Data.TryAdd("FileType", "Executable");
-                file.OnClick += () => ExecutableFile.OnClick(this, fileName);
-            }
-            else if (ArchiveFile.IsArchive(file.Item.Text))
+            if (ArchiveFile.IsArchive(file.Item.Text))
             {
                 Color color = Color.Orange.Transform(-50, -20, -20);
                 file.Item.Prefix = $"{color.ToAnsi()}\x1b[1m🗀  \x1b[0m";
@@ -582,12 +582,6 @@ public class MenuContext
             proc.Start();
         }
     }
-    
-    private volatile int _dirty;
-    private readonly AutoResetEvent _renderSignal = new(false);
-
-    private CancellationTokenSource? _renderCts;
-    private Task? _renderTask;
 
     public void StartRenderLoop()
     {

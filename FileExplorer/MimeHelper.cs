@@ -30,6 +30,7 @@ public static class MimeHelper
 
             string? guess = GuessByExtension(extension);
             ExtensionCache[extension] = guess;
+            
             return guess;
         }
 

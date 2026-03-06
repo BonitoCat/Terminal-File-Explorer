@@ -346,8 +346,9 @@ public class MenuContext
         
         string defaultColor = Color.White.ToRgbString();
         string dimmedColor = Color.LightGray.ToRgbString();
+        string fileName = file.Item.Text;
         
-        if (ExecutableFile.IsExecutable(file.Item.Text))
+        if (ExecutableFile.IsExecutable(fileName))
         {
             file.Item.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
             file.Item.Style.Foreground = Color.FromRgbString(Green);
@@ -359,7 +360,7 @@ public class MenuContext
         }
         else if (mime == null)
         {
-            if (ArchiveFile.IsArchive(file.Item.Text))
+            if (ArchiveFile.IsArchive(fileName))
             {
                 Color color = Color.Orange.Transform(-50, -20, -20);
                 file.Item.Prefix = $"{color.ToAnsi()}\x1b[1m🗀  \x1b[0m";
@@ -423,13 +424,12 @@ public class MenuContext
         {
             file.OnClick -= OnClick;
             
-            UpdateFileAttributesAccurate(file, MimeHelper.GetMimeTypeAccurate(file.Item.Text));
+            UpdateFileAttributesAccurate(file, MimeHelper.GetMimeTypeAccurate(fileName));
             file.CallOnClick();
         }
         
         file.OnClick += OnClick;
         
-        string fileName = file.Item.Text;
         FileAttributes attributes = File.GetAttributes(fileName);
         
         if (attributes.HasFlag(FileAttributes.Hidden))
@@ -455,7 +455,7 @@ public class MenuContext
         string dimmedColor = Color.LightGray.ToRgbString();
         string fileName = file.Item.Text;
         
-        if (ExecutableFile.IsExecutable(file.Item.Text))
+        if (ExecutableFile.IsExecutable(fileName))
         {
             file.Item.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
             file.Item.Style.Foreground = Color.FromRgbString(Green);
@@ -464,11 +464,18 @@ public class MenuContext
             dimmedColor = DarkGreen;
                 
             file.Data.TryAdd("FileType", "Executable");
-            file.OnClick += () => ExecutableFile.OnClick(this, fileName);
+            if (ExecutableFile.RequiresTerminal(fileName))
+            {
+                file.OnClick += () => ExecutableFile.OnClickTerm(this, fileName);
+            }
+            else
+            {
+                file.OnClick += () => ExecutableFile.OnClickDefault(this, fileName);
+            }
         }
-        if (mime == null)
+        else if (mime == null)
         {
-            if (ArchiveFile.IsArchive(file.Item.Text))
+            if (ArchiveFile.IsArchive(fileName))
             {
                 Color color = Color.Orange.Transform(-50, -20, -20);
                 file.Item.Prefix = $"{color.ToAnsi()}\x1b[1m🗀  \x1b[0m";
@@ -483,7 +490,7 @@ public class MenuContext
         }
         else if (mime.StartsWith("text/"))
         {
-            file.OnClick += XdgOpen;
+            file.OnClick += OpenFile;
         }
         else if (mime.StartsWith("image/"))
         {
@@ -494,7 +501,7 @@ public class MenuContext
             file.Data.TryAdd("DimmedColor", Color.Yellow.Transform(-70, -90, -40).ToRgbString());
             
             file.Data.TryAdd("FileType", "Image");
-            file.OnClick += XdgOpen;
+            file.OnClick += OpenFile;
         }
         else if (mime.StartsWith("video/"))
         {
@@ -505,7 +512,7 @@ public class MenuContext
             dimmedColor = Color.Orange.Transform(-40, -70, -50).ToRgbString();
             
             file.Data.TryAdd("FileType", "Video");
-            file.OnClick += XdgOpen;
+            file.OnClick += OpenFile;
         }
         else if (mime.StartsWith("audio/"))
         {
@@ -516,7 +523,7 @@ public class MenuContext
             dimmedColor = Color.Red.Transform(-40, -40, -20).ToRgbString();
             
             file.Data.TryAdd("FileType", "Audio");
-            file.OnClick += XdgOpen;
+            file.OnClick += OpenFile;
         }
         else if (mime == "application/vnd.debian.binary-package")
         {
@@ -528,22 +535,11 @@ public class MenuContext
             dimmedColor = color.Transform(-70, -90, -40).ToRgbString();
             
             file.Data.TryAdd("FileType", "Deb");
-            file.OnClick += XdgOpen;
-        }
-        else if (mime.StartsWith("application/x-pie-executable"))
-        {
-            file.Item.Prefix = $"{Color.FromRgbString(Green).ToAnsi()}\x1b[1mᐅ  \x1b[0m";
-            file.Item.Style.Foreground = Color.FromRgbString(Green);
-                
-            defaultColor = Green;
-            dimmedColor = DarkGreen;
-                
-            file.Data.TryAdd("FileType", "Executable");
-            file.OnClick += () => ExecutableFile.OnClick(this, fileName);
+            file.OnClick += OpenFile;
         }
         else
         {
-            file.OnClick += XdgOpen;
+            file.OnClick += OpenFile;
         }
         
         file.Data["DefaultColor"] = defaultColor;
@@ -561,7 +557,45 @@ public class MenuContext
         
         return;
 
-        void XdgOpen()
+        void OpenFile()
+        {
+            ProcessStartInfo startInfo;
+
+            if (OperatingSystem.IsWindows())
+            {
+                startInfo = new()
+                {
+                    FileName = "cmd.exe",
+                    Arguments = $"/c start \"\" \"{fileName}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                startInfo = new()
+                {
+                    FileName = "open",
+                    Arguments = $"\"{fileName}\"",
+                    UseShellExecute = false,
+                };
+            }
+            else
+            {
+                startInfo = new()
+                {
+                    FileName = "sh",
+                    Arguments = $"-c \"xdg-open '{fileName}' >/dev/null 2>&1\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+            }
+
+            Process proc = new() { StartInfo = startInfo };
+            proc.Start();
+        }
+        
+        /*void XdgOpen()
         {
             if (!OperatingSystem.IsLinux())
             {
@@ -573,14 +607,14 @@ public class MenuContext
                 StartInfo =
                 {
                     FileName = "sh",
-                    Arguments = $"-c \"xdg-open '{file.Item.Text}' >/dev/null 2>&1\"",
+                    Arguments = $"-c \"xdg-open '{fileName}' >/dev/null 2>&1\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,
                 },
             };
             
             proc.Start();
-        }
+        }*/
     }
 
     public void StartRenderLoop()

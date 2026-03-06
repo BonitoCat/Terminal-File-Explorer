@@ -43,6 +43,7 @@ class Program
            | Pos1 / Ctrl + Up Arrow - Go to fist item of menu
            | End / Ctrl + Down Arrow - Go to last item of menu
            | F4 - Navigate ot bookmarks
+           | C / Menu - Open the context menu
            | Ctrl + D - Switch between menu and command line
            
            Editing:
@@ -103,7 +104,7 @@ class Program
                 
                 case "--version":
                 case "-v":
-                    Console.WriteLine(Generated.BuildInfo.Version + "\n");
+                    Console.WriteLine($"v{Generated.BuildInfo.Version}\n");
                     return;
                 
                 case "--open":
@@ -152,10 +153,10 @@ class Program
         
         Logger.CreateFile().GetAwaiter().GetResult();
 
-        InputListener.Init();
         InputListener.DisableEcho();
-        
-        Logger.LogI("Initialized input listener");
+
+        Logger.LogS($"{AppDomain.CurrentDomain.FriendlyName} - v{Generated.BuildInfo.Version}");
+        Logger.LogS($"Log Level: {Logger.LogLevel}");
         
         Clipboard.ReadPaths(out ClipboardMode mode, out string[] paths);
         ClipboardContext.Items.AddRange(paths);
@@ -473,6 +474,9 @@ class Program
         _keybinds.Add(new MultiSelectKeybind(context) { Keys = [Key.LeftShift, Key.Space] });
         _keybinds.Add(new SelectAllKeybind(context) { Keys = [Key.LeftCtrl, Key.A] });
         _keybinds.Add(new DeselectAllKeybind(context) { Keys = [Key.LeftShift, Key.A] });
+
+        _keybinds.Add(new ContextKeybind(context, _contexts) { Keys = [Key.Menu] });
+        _keybinds.Add(new ContextKeybind(context, _contexts) { Keys = [Key.C] });
         
         _keybinds.Add(new CmdKeybind(context) { Keys = [Key.LeftCtrl, Key.D] });
         _keybinds.Add(new NemoKeybind(context) { Keys = [Key.LeftCtrl, Key.O] });

@@ -20,6 +20,11 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
         OpenCommandLine();
     }
     
+    /*public override void OnKeyUp()
+    {
+        OpenCommandLine();
+    }*/
+    
     private void OpenCommandLine()
     {
         _context.Listener.PauseListening = true;
@@ -32,7 +37,7 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
         {
             Console.CursorVisible = true;
             Console.SetCursorPosition(0, _context.Menu.MaxHeight + 4);
-
+            
             string shell = Environment.GetEnvironmentVariable("SHELL") ?? "/bin/bash";
             _context.CommandLine = new()
             {
@@ -49,11 +54,10 @@ public class CmdKeybind(MenuContext context) : Keybind(context)
                 },
             };
 
+            Logger.LogI($"IsInputRedirected={Console.IsInputRedirected}, IsOutputRedirected={Console.IsOutputRedirected}");
             Logger.LogI("Opened command line");
             
             _context.CommandLine.Start();
-            Thread.Sleep(500);
-            
             _context.CommandLine.WaitForExit();
             _context.CommandLine = null;
 

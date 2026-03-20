@@ -1,0 +1,47 @@
+name: Label issue by app version
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  add-version-label:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Add label based on selected app version
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || "";
+
+            const labelsToAdd = [];
+
+            if (body.includes("### App version\nBoth")) {
+              labelsToAdd.push("version:both");
+            }
+
+            if (body.includes("### App version\nTUI")) {
+              labelsToAdd.push("version:tui");
+            }
+
+            if (body.includes("### App version\nGUI")) {
+              labelsToAdd.push("version:gui");
+            }
+
+            if (body.includes("### App version\nBoth")) {
+              labelsToAdd.push("version:both", "version:tui", "version:gui");
+            }
+
+            if (labelsToAdd.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: [...new Set(labelsToAdd)]
+              });
+            }

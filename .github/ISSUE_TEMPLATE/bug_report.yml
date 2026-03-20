@@ -1,0 +1,68 @@
+name: Bug report
+description: Create a report to help us improve
+title: "[Bug]: "
+labels: ["bug"]
+assignees:
+  - BonitoCat
+
+body:
+  - type: dropdown
+    id: app-version
+    attributes:
+      label: App version
+      description: Which version of the app are you using?
+      multiple: false
+      options:
+        - Both
+        - TUI
+        - GUI
+    validations:
+      required: true
+
+  - type: textarea
+    id: bug
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: To Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: A clear and concise description of what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain your problem.
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add the corresponding log file from the app data folder.
+      value: |
+        Windows: %appdata%\Local\fe\logs
+        Linux: ~/.local/share/fe/logs
+    validations:
+      required: false

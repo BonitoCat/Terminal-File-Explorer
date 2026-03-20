@@ -1,0 +1,77 @@
+name: Label issue by os version
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  add-version-label:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Debug issue body
+        uses: actions/github-script@v8
+        with:
+          script: |
+            core.info("ISSUE BODY START");
+            core.info(context.payload.issue.body || "");
+            core.info("ISSUE BODY END");
+
+      - name: Sync labels based on selected os version
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || "";
+
+            const match = body.match(/### OS version\s+([^\r\n]+)/i);
+            if (!match) {
+              core.setFailed("Could not find 'OS version' in the issue body.");
+              return;
+            }
+
+            const value = match[1].trim().toLowerCase();
+
+            const managedLabels = ["os:windows", "os:linux", "os:mac"];
+            const wantedLabels = new Set();
+
+            if (value === "windows") {
+              wantedLabels.add("os:windows");
+            } else if (value === "linux") {
+              wantedLabels.add("os:linux");
+            } else if (value === "macos") {
+              wantedLabels.add("os:mac");
+            } else {
+              core.setFailed(`Unknown OS version value: ${value}`);
+              return;
+            }
+
+            const currentLabels = new Set((issue.labels || []).map(label => label.name));
+
+            const labelsToAdd = managedLabels.filter(label => wantedLabels.has(label) && !currentLabels.has(label));
+            const labelsToRemove = managedLabels.filter(label => !wantedLabels.has(label) && currentLabels.has(label));
+
+            if (labelsToAdd.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labelsToAdd
+              });
+            }
+
+            for (const label of labelsToRemove) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  name: label
+                });
+              } catch (error) {
+                core.info(`Could not remove ${label}: ${error.message}`);
+              }
+            }

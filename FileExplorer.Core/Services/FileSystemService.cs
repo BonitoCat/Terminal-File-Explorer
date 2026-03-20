@@ -10,7 +10,9 @@ public class FileSystemService
         {
             Path = path,
         };
+
+        // todo: load folder content
         
-        
+        return content;
     }
 }

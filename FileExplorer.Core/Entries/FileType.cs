@@ -1,4 +1,4 @@
-namespace FileExplorer.Core.Models;
+namespace FileExplorer.Core.Entries;
 
 public enum FileType
 {
@@ -7,7 +7,7 @@ public enum FileType
     Executable,
     Archive,
     Image,
-    Video,
     Audio,
+    Video,
     Deb,
 }

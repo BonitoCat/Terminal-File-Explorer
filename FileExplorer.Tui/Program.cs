@@ -1,26 +1,22 @@
-﻿using System.Diagnostics;
-using System.Text;
-using FileExplorer.Tui.Context;
-using FileExplorer.Tui.Keybinds;
-using FileExplorer.Tui.Options;
-using FileExplorer.Tui.RemotePaths;
-using FileLib;
-using Generated;
-using InputLib;
-using InputLib.EventArgs;
-using LoggerLib;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
-using TuiLib;
-using TuiLib.Controls;
-using Color = TuiLib.Color;
+﻿using FileExplorer.Core.Interfaces;
+using FileExplorer.Core.Services;
 
 namespace FileExplorer.Tui;
 
 class Program
 {
-    private static string _helpStr =
+    public static void Main(string[] args)
+    {
+        FileSystemService fileService = new();
+        foreach (IFileSystemEntry entry in fileService.EnumerateFolderEntries("/home/jakob/Dokumente/dev/CSharp"))
+        {
+            Console.WriteLine(entry.FullName);
+        }
+
+        Console.ReadLine();
+    }
+    
+    /*private static string _helpStr =
         $"""
          
           Command:
@@ -708,5 +704,5 @@ class Program
         byte b = (byte) (pixel.B * pixel.A / 255);
 
         return new Color(r, g, b);
-    }
+    }*/
 }

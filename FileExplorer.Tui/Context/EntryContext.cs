@@ -141,7 +141,7 @@ public class EntryContext : IEntryContext
                 Menu.AddItem(lbItem);
             }
 
-            NaturalStringComparer naturalComparer = new();
+            //NaturalStringComparer naturalComparer = new();
             Stopwatch stopwatch = new();
             stopwatch.Start();
             
@@ -178,7 +178,7 @@ public class EntryContext : IEntryContext
                     .Where(item => SearchString == null ||
                                    (SearchString != null && item.Item.Text.Contains(SearchString, StringComparison.CurrentCultureIgnoreCase)))
                     .OrderBy(item => item.Item.Text.StartsWith('.'))
-                    .ThenBy(item => item.Item.Text, naturalComparer)
+                    //.ThenBy(item => item.Item.Text, naturalComparer)
                     .ToList());
             
             Logger.LogI($"Directories added to menu in: {stopwatch.ElapsedMilliseconds}ms");
@@ -258,7 +258,7 @@ public class EntryContext : IEntryContext
                     .Where(item => SearchString == null ||
                                    (SearchString != null && item.Item.Text.Contains(SearchString, StringComparison.CurrentCultureIgnoreCase)))
                     .OrderBy(item => item.Item.Text.StartsWith('.'))
-                    .ThenBy(item => item.Item.Text, naturalComparer)
+                    //.ThenBy(item => item.Item.Text, naturalComparer)
                     .ToList());
             
             Logger.LogI($"Files added to menu in: {stopwatch.ElapsedMilliseconds}ms");
@@ -288,8 +288,8 @@ public class EntryContext : IEntryContext
                     return;
                 }
 
-                string? mime = MimeHelper.GetMimeTypeFast(fullPath);
-                UpdateFileAttributesFast(item, mime, token);
+                //string? mime = MimeHelper.GetMimeTypeFast(fullPath);
+                //UpdateFileAttributesFast(item, mime, token);
                 
                 Interlocked.Increment(ref filesLoaded);
                 if (filesLoaded > 100)
@@ -466,7 +466,7 @@ public class EntryContext : IEntryContext
         {
             file.OnClick -= OnClick;
             
-            UpdateFileAttributesAccurate(file, MimeHelper.GetMimeTypeAccurate(fileName));
+            //UpdateFileAttributesAccurate(file, MimeHelper.GetMimeTypeAccurate(fileName));
             file.CallOnClick();
         }
         
@@ -946,7 +946,7 @@ public class EntryContext : IEntryContext
     {
         Logger.LogI("Reading input...");
 
-        InputListener? keyListener = ForceTtyInput ? new TtyInputListener() : InputListener.New();
+        /*InputListener? keyListener = ForceTtyInput ? new TtyInputListener() : InputListener.New();
         if (keyListener == null)
         {
             Logger.LogW("Could not load listener... returning");
@@ -1150,7 +1150,9 @@ public class EntryContext : IEntryContext
         Console.CursorVisible = false;
         Logger.LogI("Done reading input");
         
-        return result;
+        return result;*/
+
+        return null;
     }
     
     public void CopyDirectory(string sourceDir, string destinationDir)

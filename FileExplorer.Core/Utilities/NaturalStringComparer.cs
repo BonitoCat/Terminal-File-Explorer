@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace FileExplorer.Tui;
+namespace FileExplorer.Core.Utilities;
 
 public sealed class NaturalStringComparer : IComparer<string>
 {

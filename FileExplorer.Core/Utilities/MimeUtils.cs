@@ -1,10 +1,9 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
-using System.Text;
 
-namespace FileExplorer.Tui;
+namespace FileExplorer.Core.Utilities;
 
-public static class MimeHelper
+public static class MimeUtils
 {
     [DllImport("libmagic.so.1", CallingConvention = CallingConvention.Cdecl)]
     private static extern IntPtr magic_open(int flags);

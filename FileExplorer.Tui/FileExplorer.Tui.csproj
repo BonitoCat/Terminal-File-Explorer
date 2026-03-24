@@ -15,6 +15,7 @@
       <ProjectReference Include="..\..\LoggerLib\LoggerLib\LoggerLib.csproj" />
       <ProjectReference Include="..\..\MetadataGenerator\MetadataGenerator\MetadataGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
       <AdditionalFiles Include="builds/fe-linux-x64-full/DEBIAN/control" />
+      <ProjectReference Include="..\FileExplorer.Core\FileExplorer.Core.csproj" />
     </ItemGroup>
 
     <ItemGroup>
